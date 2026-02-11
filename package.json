@@ -1,0 +1,73 @@
+{
+  "name": "streamline",
+  "version": "0.2.0",
+  "description": "Node.js SDK for Streamline - The AI-Native Streaming Platform",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "typecheck": "tsc --noEmit",
+    "docs": "typedoc src/index.ts --out docs/api",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "streamline",
+    "streaming",
+    "kafka",
+    "messaging",
+    "event-driven",
+    "realtime",
+    "graphql",
+    "typescript"
+  ],
+  "author": "Streamline Team <team@streamline.dev>",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/streamline/streamline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/streamline/streamline.git",
+    "directory": "sdks/nodejs"
+  },
+  "bugs": {
+    "url": "https://github.com/streamline/streamline/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.55.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "typedoc": "^0.25.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.7.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    }
+  },
+  "dependencies": {}
+}
