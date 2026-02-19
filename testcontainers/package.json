@@ -1,0 +1,67 @@
+{
+  "name": "@streamline/testcontainers",
+  "version": "0.2.0",
+  "description": "Testcontainers module for Streamline - The Redis of Streaming",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "streamline",
+    "testcontainers",
+    "testing",
+    "docker",
+    "kafka",
+    "streaming",
+    "integration-testing"
+  ],
+  "author": "Streamline Team <team@streamline.dev>",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/streamlinelabs/streamline-node-sdk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/streamlinelabs/streamline-node-sdk.git",
+    "directory": "testcontainers"
+  },
+  "bugs": {
+    "url": "https://github.com/streamlinelabs/streamline-node-sdk/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "testcontainers": "^10.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "streamline": ">=0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "streamline": {
+      "optional": true
+    }
+  }
+}
