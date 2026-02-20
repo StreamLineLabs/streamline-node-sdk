@@ -1,0 +1,89 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build --if-present
+      - run: npm test --if-present -- --coverage
+      - name: Upload coverage
+        if: matrix.node-version == 22
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/lcov.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - run: npm audit --audit-level=high
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - name: Start Streamline server
+        run: docker compose -f docker-compose.test.yml up -d
+      - name: Wait for Streamline to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9094/health; then
+              echo " Streamline is healthy"
+              exit 0
+            fi
+            echo "Waiting for Streamline... ($i/30)"
+            sleep 2
+          done
+          echo "Streamline failed to start"
+          docker compose -f docker-compose.test.yml logs
+          exit 1
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          STREAMLINE_BOOTSTRAP_SERVERS: localhost:9092
+      - name: Tear down Streamline
+        if: always()
+        run: docker compose -f docker-compose.test.yml down
+
+  docs:
+    name: Generate TypeDoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - name: Generate API docs
+        run: npm run docs
