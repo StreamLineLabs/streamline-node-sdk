@@ -1,0 +1,36 @@
+# Pre-commit hooks for Streamline Node.js SDK
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+        exclude: 'node_modules/'
+      - id: end-of-file-fixer
+        exclude: 'node_modules/'
+      - id: trailing-whitespace
+        exclude: '(\.md$|node_modules/)'
+      - id: no-commit-to-branch
+        args: ['--branch', 'main']
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: npx eslint --max-warnings=0
+        language: system
+        types: [ts]
+        pass_filenames: false
+
+      - id: typecheck
+        name: typecheck
+        entry: npx tsc --noEmit
+        language: system
+        types: [ts]
+        pass_filenames: false
