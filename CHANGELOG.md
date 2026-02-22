@@ -1,6 +1,7 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+- chore: update tsup configuration for tree shaking (2026-02-22)
 - test: add unit tests for connection retry logic (2026-02-22)
 - refactor: consolidate error handling in producer (2026-02-22)
 - fix: resolve type inference for consumer options (2026-02-22)
