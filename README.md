@@ -1,6 +1,7 @@
 # Streamline Node.js SDK
 
 [![CI](https://github.com/streamlinelabs/streamline-node-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/streamlinelabs/streamline-node-sdk/actions/workflows/ci.yml)
+[![codecov](https://img.shields.io/codecov/c/github/streamlinelabs/streamline-node-sdk?style=flat-square)](https://codecov.io/gh/streamlinelabs/streamline-node-sdk)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue.svg)](https://www.typescriptlang.org/)
