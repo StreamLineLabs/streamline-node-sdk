@@ -29,4 +29,6 @@ export { Producer, ProducerConfig } from './producer';
 export { Consumer, ConsumerConfig } from './consumer';
 export { Admin } from './admin';
 export { StreamlineTracing, TracingConfig } from './telemetry';
+export { JsonSchemaSerializer, SchemaRegistryClient } from './serializers';
+export type { SchemaRegistryConfig, JsonSchemaSerializerOptions } from './serializers';
 export * from './types';
