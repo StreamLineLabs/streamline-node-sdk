@@ -88,7 +88,7 @@ export class Streamline {
   constructor(bootstrapServers: string, options: StreamlineOptions = {}) {
     this.bootstrapServers = bootstrapServers;
     this.options = {
-      httpEndpoint: options.httpEndpoint ?? 'http://localhost:9094',
+      httpEndpoint: options.httpEndpoint ?? process.env.STREAMLINE_URL ?? 'http://localhost:9094',
       clientId: options.clientId ?? 'streamline-nodejs',
       apiKey: options.apiKey ?? '',
       tls: options.tls ?? false,
@@ -447,6 +447,28 @@ export class Streamline {
     `, { groupId });
 
     return response.consumerGroup ?? undefined;
+  }
+
+  /**
+   * Commit consumer offsets for a group.
+   *
+   * @param groupId - Consumer group ID
+   * @param offsets - Map of "topic:partition" to offset
+   */
+  async commitOffsets(
+    groupId: string,
+    offsets: Map<string, number>,
+  ): Promise<void> {
+    const offsetEntries = Array.from(offsets.entries()).map(([key, offset]) => {
+      const [topic, partition] = key.split(':');
+      return { topic, partition: parseInt(partition, 10), offset };
+    });
+
+    await this.graphql(`
+      mutation CommitOffsets($groupId: String!, $offsets: [OffsetCommitInput!]!) {
+        commitOffsets(groupId: $groupId, offsets: $offsets)
+      }
+    `, { groupId, offsets: offsetEntries });
   }
 
   // =========================================================================

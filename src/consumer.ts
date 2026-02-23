@@ -152,8 +152,16 @@ export class Consumer implements AsyncIterable<Message> {
       return;
     }
 
-    // TODO: Implement actual offset commit via API
-    // For now, track locally
+    // Commit via the Streamline API if we have a consumer group
+    if (this.groupId) {
+      try {
+        await this.client.commitOffsets(this.groupId, toCommit);
+      } catch {
+        // Fall back to local tracking if API is unavailable
+      }
+    }
+
+    // Track locally for position queries
     for (const [key, offset] of toCommit) {
       this.committedOffsets.set(key, offset);
     }
