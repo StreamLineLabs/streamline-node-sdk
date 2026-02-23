@@ -1,15 +1,18 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
-- chore: update tsup configuration for tree shaking (2026-02-22)
-- test: add unit tests for connection retry logic (2026-02-22)
-- refactor: consolidate error handling in producer (2026-02-22)
-- fix: resolve type inference for consumer options (2026-02-22)
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Fixed
+- Resolve type inference for consumer options
+
+### Changed
+- Update tsup configuration for tree shaking
+- Consolidate error handling in producer
 
 ## [0.2.0] - 2026-02-18
 
