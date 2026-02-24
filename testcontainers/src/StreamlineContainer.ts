@@ -354,6 +354,104 @@ export class StartedStreamlineContainer {
     await this.startedContainer.stop();
   }
 
+  // -------------------------------------------------------------------------
+  // Enhanced capabilities: batch produce, consumer groups, migration helpers
+  // -------------------------------------------------------------------------
+
+  /**
+   * Produces a batch of messages to a topic.
+   *
+   * @param topic - The topic name
+   * @param messages - Array of message values
+   */
+  async produceMessages(topic: string, messages: string[]): Promise<void> {
+    for (const msg of messages) {
+      await this.produceMessage(topic, msg);
+    }
+  }
+
+  /**
+   * Produces a batch of keyed messages to a topic.
+   *
+   * @param topic - The topic name
+   * @param messages - Map of key to value
+   */
+  async produceKeyedMessages(
+    topic: string,
+    messages: Record<string, string>
+  ): Promise<void> {
+    for (const [key, value] of Object.entries(messages)) {
+      await this.produceMessage(topic, value, key);
+    }
+  }
+
+  /**
+   * Lists consumer groups.
+   *
+   * @returns Array of consumer group IDs
+   */
+  async listConsumerGroups(): Promise<string[]> {
+    const result = await this.startedContainer.exec([
+      'streamline-cli',
+      'groups',
+      'list',
+      '--format',
+      'json',
+    ]);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to list consumer groups: ${result.output}`);
+    }
+    try {
+      return JSON.parse(result.output);
+    } catch {
+      return result.output
+        .trim()
+        .split('\n')
+        .map((line: string) => line.trim().replace(/["\[\],]/g, ''))
+        .filter((line: string) => line.length > 0);
+    }
+  }
+
+  /**
+   * Asserts that a consumer group exists.
+   *
+   * @param groupId - The consumer group ID
+   * @throws Error if the group does not exist
+   */
+  async assertConsumerGroupExists(groupId: string): Promise<void> {
+    const result = await this.startedContainer.exec([
+      'streamline-cli',
+      'groups',
+      'describe',
+      groupId,
+    ]);
+    if (result.exitCode !== 0) {
+      throw new Error(`Consumer group '${groupId}' does not exist`);
+    }
+  }
+
+  /**
+   * Gets cluster information from the HTTP API.
+   *
+   * @returns Cluster info object
+   */
+  async getClusterInfo(): Promise<Record<string, unknown>> {
+    const response = await fetch(this.getInfoUrl(), {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to get cluster info: HTTP ${response.status}`);
+    }
+    return response.json() as Promise<Record<string, unknown>>;
+  }
+
+  /**
+   * Stops the container.
+   */
+  async stop(): Promise<void> {
+    await this.startedContainer.stop();
+  }
+
   /**
    * Returns the underlying started testcontainer instance.
    *
@@ -458,5 +556,104 @@ export class StreamlineContainer {
   async start(): Promise<StartedStreamlineContainer> {
     const startedContainer = await this.container.start();
     return new StartedStreamlineContainer(startedContainer);
+  }
+
+  /**
+   * Creates a Streamline container configured as a drop-in Kafka replacement.
+   *
+   * Useful for migrating from Kafka-based tests:
+   * ```typescript
+   * // Before (Kafka):
+   * // const container = await new KafkaContainer().start();
+   *
+   * // After (Streamline):
+   * const container = await StreamlineContainer.asKafkaReplacement();
+   * const bootstrapServers = container.getBootstrapServers();
+   * ```
+   *
+   * @returns A started StreamlineContainer configured for Kafka compatibility
+   */
+  static async asKafkaReplacement(): Promise<StartedStreamlineContainer> {
+    return new StreamlineContainer({
+      inMemory: true,
+      environment: {
+        STREAMLINE_AUTO_CREATE_TOPICS: 'true',
+        STREAMLINE_DEFAULT_PARTITIONS: '1',
+      },
+    }).start();
+  }
+
+  /**
+   * Creates a container pre-configured with topics.
+   *
+   * @param topics - Map of topic name to partition count
+   * @returns A started StreamlineContainer with pre-configured topic env vars
+   */
+  static async withPreConfiguredTopics(
+    topics: Record<string, number>
+  ): Promise<StartedStreamlineContainer> {
+    const environment: Record<string, string> = {};
+    for (const [name, partitions] of Object.entries(topics)) {
+      environment[`STREAMLINE_AUTO_TOPIC_${name}`] = String(partitions);
+    }
+    return new StreamlineContainer({
+      inMemory: true,
+      environment,
+    }).start();
+  }
+
+  /**
+   * Enable ephemeral mode: in-memory, auto-cleanup, fastest startup.
+   * The server will auto-shutdown after the idle timeout if no clients are connected.
+   */
+  withEphemeral(): this {
+    this.withEnvironment({
+      STREAMLINE_EPHEMERAL: 'true',
+      STREAMLINE_IN_MEMORY: 'true',
+    });
+    return this;
+  }
+
+  /**
+   * Set the idle timeout before ephemeral server auto-shuts down.
+   * @param seconds - Seconds to wait with zero connections before shutdown
+   */
+  withEphemeralIdleTimeout(seconds: number): this {
+    this.withEnvironment({
+      STREAMLINE_EPHEMERAL_IDLE_TIMEOUT: String(seconds),
+    });
+    return this;
+  }
+
+  /**
+   * Auto-create topics on startup in ephemeral mode.
+   * @param topicSpecs - Comma-separated "name:partitions" specs
+   */
+  withEphemeralAutoTopics(topicSpecs: string): this {
+    this.withEnvironment({
+      STREAMLINE_EPHEMERAL_AUTO_TOPICS: topicSpecs,
+    });
+    return this;
+  }
+
+  /**
+   * Create and start a container optimized for CI/CD testing.
+   *
+   * @example
+   * ```typescript
+   * const container = await StreamlineContainer.forTesting();
+   * const bootstrapServers = container.getBootstrapServers();
+   * ```
+   */
+  static async forTesting(): Promise<StartedStreamlineContainer> {
+    return new StreamlineContainer({
+      inMemory: true,
+      environment: {
+        STREAMLINE_EPHEMERAL: 'true',
+        STREAMLINE_AUTO_CREATE_TOPICS: 'true',
+        STREAMLINE_DEFAULT_PARTITIONS: '3',
+        STREAMLINE_LOG_LEVEL: 'warn',
+      },
+    }).start();
   }
 }
