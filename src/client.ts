@@ -584,3 +584,5 @@ export class Streamline {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
+
+// add TypeScript generic types for message values
