@@ -71,3 +71,4 @@ describe('Streamline Client', () => {
     });
   });
 });
+// TODO: add vitest coverage for consumer rebalance
