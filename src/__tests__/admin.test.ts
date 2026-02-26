@@ -57,3 +57,4 @@ describe('Admin', () => {
     });
   });
 });
+// migrate internal event emitter to typed events
