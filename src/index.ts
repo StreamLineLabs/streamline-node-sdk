@@ -24,7 +24,8 @@
  * @packageDocumentation
  */
 
-export { Streamline, StreamlineOptions } from './client';
+export { Streamline, StreamlineOptions, TlsOptions, SaslOptions } from './client';
+export { SchemaRegistry, SchemaType, SchemaInfo } from './schema';
 export { Producer, ProducerConfig } from './producer';
 export { Consumer, ConsumerConfig } from './consumer';
 export { Admin } from './admin';
@@ -32,3 +33,5 @@ export { StreamlineTracing, TracingConfig } from './telemetry';
 export { JsonSchemaSerializer, SchemaRegistryClient } from './serializers';
 export type { SchemaRegistryConfig, JsonSchemaSerializerOptions } from './serializers';
 export * from './types';
+export { EmbeddedStreamline, EmbeddedConfig, EmbeddedMessage } from './embedded';
+export { AIClient, EmbeddingResult, SearchResult, AnomalyAlert, RAGResponse } from './ai';

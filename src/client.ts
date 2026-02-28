@@ -11,8 +11,33 @@ import {
   QueryRow,
   StreamlineError,
   ConnectionError,
-  Header,
 } from './types';
+
+/**
+ * TLS configuration for secure connections.
+ */
+export interface TlsOptions {
+  /** CA certificate (PEM string or Buffer) */
+  ca?: string | Buffer;
+  /** Client certificate for mutual TLS (PEM string or Buffer) */
+  cert?: string | Buffer;
+  /** Client private key for mutual TLS (PEM string or Buffer) */
+  key?: string | Buffer;
+  /** Skip server certificate verification (NOT recommended for production) */
+  rejectUnauthorized?: boolean;
+}
+
+/**
+ * SASL authentication configuration.
+ */
+export interface SaslOptions {
+  /** SASL mechanism */
+  mechanism: 'PLAIN' | 'SCRAM-SHA-256' | 'SCRAM-SHA-512';
+  /** Username */
+  username: string;
+  /** Password */
+  password: string;
+}
 
 /**
  * Client configuration options.
@@ -24,8 +49,10 @@ export interface StreamlineOptions {
   clientId?: string;
   /** API key for authentication */
   apiKey?: string;
-  /** Enable TLS */
-  tls?: boolean;
+  /** TLS configuration (true for defaults, or TlsOptions for custom) */
+  tls?: boolean | TlsOptions;
+  /** SASL authentication configuration */
+  sasl?: SaslOptions;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
   /** Auto-reconnect on connection loss (default: true) */
@@ -74,8 +101,7 @@ export interface ConsumeOptions {
  * ```
  */
 export class Streamline {
-  private bootstrapServers: string;
-  private options: Required<StreamlineOptions>;
+  private options: Omit<Required<StreamlineOptions>, 'sasl'> & { sasl?: SaslOptions };
   private connected: boolean = false;
   private abortController?: AbortController;
 
@@ -85,13 +111,13 @@ export class Streamline {
    * @param bootstrapServers - Comma-separated list of broker addresses
    * @param options - Client configuration options
    */
-  constructor(bootstrapServers: string, options: StreamlineOptions = {}) {
-    this.bootstrapServers = bootstrapServers;
+  constructor(_bootstrapServers: string, options: StreamlineOptions = {}) {
     this.options = {
-      httpEndpoint: options.httpEndpoint ?? process.env.STREAMLINE_URL ?? 'http://localhost:9094',
+      httpEndpoint: options.httpEndpoint ?? process.env['STREAMLINE_URL'] ?? 'http://localhost:9094',
       clientId: options.clientId ?? 'streamline-nodejs',
       apiKey: options.apiKey ?? '',
       tls: options.tls ?? false,
+      ...(options.sasl ? { sasl: options.sasl } : {}),
       timeout: options.timeout ?? 30000,
       autoReconnect: options.autoReconnect ?? true,
       maxReconnectAttempts: options.maxReconnectAttempts ?? 10,
@@ -482,7 +508,7 @@ export class Streamline {
    * @returns Array of result rows
    */
   async query(sql: string): Promise<QueryRow[]> {
-    const response = await this.request('/api/query', {
+    const response = await this.request('/api/v1/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sql }),
@@ -493,7 +519,36 @@ export class Streamline {
       throw new StreamlineError(`Query failed: ${error}`, 'QUERY_ERROR');
     }
 
-    return response.json();
+    return response.json() as Promise<QueryRow[]>;
+  }
+
+  /**
+   * Execute a SQL query with full result metadata.
+   */
+  async queryFull(sql: string, options: { timeoutMs?: number; maxRows?: number } = {}): Promise<{
+    columns: { name: string; type: string }[];
+    rows: unknown[][];
+    metadata: { execution_time_ms: number; rows_scanned: number; rows_returned: number; truncated: boolean };
+  }> {
+    const response = await this.request('/api/v1/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sql,
+        timeout_ms: options.timeoutMs ?? 30000,
+        max_rows: options.maxRows ?? 10000,
+        format: 'json',
+      }),
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new StreamlineError(`Query failed: ${error}`, 'QUERY_ERROR');
+    }
+    return response.json() as Promise<{
+      columns: { name: string; type: string }[];
+      rows: unknown[][];
+      metadata: { execution_time_ms: number; rows_scanned: number; rows_returned: number; truncated: boolean };
+    }>;
   }
 
   // =========================================================================
@@ -506,7 +561,11 @@ export class Streamline {
       ...(init.headers as Record<string, string>),
     };
 
-    if (this.options.apiKey) {
+    if (this.options.sasl) {
+      const { mechanism, username, password } = this.options.sasl;
+      headers['X-Sasl-Mechanism'] = mechanism;
+      headers['Authorization'] = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+    } else if (this.options.apiKey) {
       headers['Authorization'] = `Bearer ${this.options.apiKey}`;
     }
 
@@ -518,7 +577,7 @@ export class Streamline {
       const response = await fetch(url, {
         ...init,
         headers,
-        signal: this.abortController?.signal,
+        signal: this.abortController?.signal ?? null,
       });
       return response;
     } catch (error) {

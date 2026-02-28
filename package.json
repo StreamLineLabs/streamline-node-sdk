@@ -39,14 +39,17 @@
   ],
   "author": "Streamline Team <team@streamline.dev>",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/streamline/streamline",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "homepage": "https://github.com/streamlinelabs/streamline-node-sdk",
   "repository": {
     "type": "git",
-    "url": "https://github.com/streamline/streamline.git",
-    "directory": "sdks/nodejs"
+    "url": "https://github.com/streamlinelabs/streamline-node-sdk.git"
   },
   "bugs": {
-    "url": "https://github.com/streamline/streamline/issues"
+    "url": "https://github.com/streamlinelabs/streamline-node-sdk/issues"
   },
   "engines": {
     "node": ">=18.0.0"
