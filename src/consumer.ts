@@ -283,3 +283,4 @@ export class Consumer implements AsyncIterable<Message> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
+
