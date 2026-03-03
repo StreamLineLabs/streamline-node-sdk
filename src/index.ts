@@ -35,3 +35,4 @@ export type { SchemaRegistryConfig, JsonSchemaSerializerOptions } from './serial
 export * from './types';
 export { EmbeddedStreamline, EmbeddedConfig, EmbeddedMessage } from './embedded';
 export { AIClient, EmbeddingResult, SearchResult, AnomalyAlert, RAGResponse } from './ai';
+
