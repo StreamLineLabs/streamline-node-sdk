@@ -65,8 +65,14 @@ main();
 
 - **TypeScript-first**: Full type safety with comprehensive type definitions
 - **Async/await**: Modern async API with async iterators for consumption
+- **Admin client**: Topic management, consumer groups via HTTP REST API
+- **SQL queries**: Execute SQL against streaming data via `client.query()`
 - **Auto-batching**: Efficient message batching for producers
 - **Auto-commit**: Automatic offset management for consumers
+- **Compression**: Zstd, LZ4, Snappy, Gzip
+- **TLS/mTLS**: Secure connections with configurable certificates
+- **SASL authentication**: PLAIN, SCRAM-SHA-256/512
+- **Connection pooling**: Automatic connection management
 - **Reconnection**: Automatic reconnection with configurable backoff
 - **OpenTelemetry Tracing**: Optional distributed tracing for produce/consume operations
 
@@ -391,6 +397,15 @@ npm run typecheck
 # Linting
 npm run lint
 ```
+
+## Requirements
+
+- Node.js 18 or later
+- Streamline server 0.2.0 or later
+
+## Contributing
+
+Contributions are welcome! Please see the [organization contributing guide](https://github.com/streamlinelabs/.github/blob/main/CONTRIBUTING.md) for guidelines.
 
 ## License
 
