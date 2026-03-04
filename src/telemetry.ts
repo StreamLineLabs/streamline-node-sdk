@@ -334,3 +334,4 @@ export class StreamlineTracing {
     return otelApi.propagation.extract(otelApi.context.active(), headers);
   }
 }
+
