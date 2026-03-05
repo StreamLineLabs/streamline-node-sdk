@@ -121,3 +121,79 @@ export class JsonSchemaSerializer {
     return JSON.parse(new TextDecoder().decode(payload));
   }
 }
+
+export interface AvroSchemaSerializerOptions {
+  schemaRegistryUrl?: string;
+  schema?: Record<string, unknown>;
+  autoRegister?: boolean;
+}
+
+/**
+ * Avro schema serializer using Confluent wire format.
+ *
+ * Serializes values as JSON-encoded Avro (no binary Avro encoding)
+ * with the standard wire format: magic byte (0x00) + 4-byte BE schema ID + payload.
+ *
+ * @example
+ * ```typescript
+ * const serializer = new AvroSchemaSerializer({
+ *   schemaRegistryUrl: 'http://localhost:9094',
+ *   schema: {
+ *     type: 'record',
+ *     name: 'User',
+ *     fields: [
+ *       { name: 'id', type: 'int' },
+ *       { name: 'name', type: 'string' },
+ *     ],
+ *   },
+ * });
+ *
+ * const bytes = await serializer.serialize('users', { id: 1, name: 'Alice' });
+ * ```
+ */
+export class AvroSchemaSerializer {
+  private registry: SchemaRegistryClient;
+  private schemaStr: string | undefined;
+  private autoRegister: boolean;
+  private schemaId: number | undefined;
+
+  constructor(options: AvroSchemaSerializerOptions = {}) {
+    this.registry = new SchemaRegistryClient({
+      url: options.schemaRegistryUrl ?? 'http://localhost:9094',
+    });
+    this.schemaStr = options.schema ? JSON.stringify(options.schema) : undefined;
+    this.autoRegister = options.autoRegister ?? true;
+  }
+
+  async serialize(topic: string, value: Record<string, unknown>): Promise<Uint8Array> {
+    if (this.schemaId === undefined && this.autoRegister && this.schemaStr) {
+      const subject = `${topic}-value`;
+      this.schemaId = await this.registry.registerSchema(subject, this.schemaStr, 'AVRO');
+    }
+
+    const payload = new TextEncoder().encode(JSON.stringify(value));
+
+    if (this.schemaId !== undefined) {
+      const buf = new Uint8Array(5 + payload.length);
+      buf[0] = 0x00;
+      const view = new DataView(buf.buffer);
+      view.setUint32(1, this.schemaId, false);
+      buf.set(payload, 5);
+      return buf;
+    }
+
+    return payload;
+  }
+
+  async deserialize(data: Uint8Array): Promise<Record<string, unknown>> {
+    let payload: Uint8Array;
+
+    if (data.length >= 5 && data[0] === 0x00) {
+      payload = data.slice(5);
+    } else {
+      payload = data;
+    }
+
+    return JSON.parse(new TextDecoder().decode(payload));
+  }
+}
