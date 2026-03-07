@@ -450,6 +450,33 @@ npm run lint
 | `sasl.password` | — | SASL password |
 | `apiKey` | — | Bearer token for HTTP API authentication |
 
+## Circuit Breaker
+
+Protect your application from cascading failures when the Streamline server is unresponsive:
+
+```typescript
+import { CircuitBreaker, CircuitState } from '@streamlinelabs/streamline';
+
+const breaker = new CircuitBreaker({
+  failureThreshold: 5,      // Open after 5 consecutive failures
+  successThreshold: 2,      // Close after 2 half-open successes
+  openTimeout: 30000,       // 30s before probing
+  onStateChange: (from, to) => console.log(`Circuit: ${from} → ${to}`),
+});
+
+// Wrap any async operation
+const result = await breaker.execute(async () => {
+  return client.produce('events', { action: 'click' });
+});
+
+// Check state programmatically
+if (breaker.getState() === CircuitState.Open) {
+  console.log('Circuit is open — requests will be rejected');
+}
+```
+
+When the circuit is open, `execute()` throws a retryable `StreamlineError` with code `CIRCUIT_OPEN`. See the [Circuit Breaker guide](https://streamlinelabs.dev/docs/features/circuit-breaker) for details.
+
 ## Contributing
 
 Contributions are welcome! Please see the [organization contributing guide](https://github.com/streamlinelabs/.github/blob/main/CONTRIBUTING.md) for guidelines.

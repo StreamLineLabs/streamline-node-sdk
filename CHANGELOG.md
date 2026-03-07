@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Circuit breaker pattern (`CircuitBreaker`) with configurable thresholds and async `execute()`
+- Circuit breaker test suite (13 tests covering state machine, async execution, error classification)
+- `TypedStreamline<T>` wrapper for compile-time typed produce/consume
+- Admin API: `alterTopicConfig`, `createPartitions`, `deleteConsumerGroup`, `resetConsumerGroupOffsets`, `describeCluster`, `describeBrokerConfig` — all implemented via GraphQL
+- Circuit breaker usage example (`circuit-breaker.ts`)
+- TLS/SASL authentication example (`security.ts`)
+- Producer test expansion: batching, linger timer, compression passing, retry with backoff
+
+### Fixed
+- `seekToEnd()` now correctly removes tracked offset so next poll starts from latest (was using invalid -1)
+- Consumer `group` parameter now wired to GraphQL Messages query (was silently ignored)
+- Producer passes compression type to `produceBatch()` call
+- `embedded.ts` query: JSON.parse wrapped in try-catch to prevent crash on invalid response
+- Admin tests updated from NOT_IMPLEMENTED stubs to real connection tests with input validation
+
+### Changed
 - feat: add TypeScript generic types for message values
 - fix: handle reconnection in consumer group (2026-03-06)
 - test: add e2e tests for batch producer (2026-03-06)

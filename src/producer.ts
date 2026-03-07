@@ -57,7 +57,7 @@ export class Producer {
   private topic: string;
   private config: Required<ProducerConfig>;
   private batch: PendingRecord[] = [];
-  private flushTimer?: ReturnType<typeof setTimeout>;
+  private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private closed: boolean = false;
   private flushing: boolean = false;
 
@@ -191,7 +191,7 @@ export class Producer {
 
     for (let attempt = 0; attempt <= this.config.retries; attempt++) {
       try {
-        return await this.client.produceBatch(this.topic, records);
+        return await this.client.produceBatch(this.topic, records, { compression: this.config.compression });
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
