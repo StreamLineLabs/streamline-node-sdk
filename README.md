@@ -403,6 +403,53 @@ npm run lint
 - Node.js 18 or later
 - Streamline server 0.2.0 or later
 
+## Configuration Reference
+
+### Client
+
+| Parameter | Default | Description |
+|---|---|---|
+| `brokers` | `["localhost:9092"]` | Array of Streamline broker addresses |
+| `clientId` | auto-generated | Client identifier for server-side logging |
+| `httpEndpoint` | `http://localhost:9094` | HTTP API endpoint for admin operations |
+| `timeout` | `30000` | Request timeout in milliseconds |
+| `autoReconnect` | `true` | Automatically reconnect on connection loss |
+| `maxReconnectAttempts` | `10` | Maximum reconnection attempts |
+| `reconnectDelay` | `1000` | Delay between reconnection attempts (ms) |
+
+### Producer
+
+| Parameter | Default | Description |
+|---|---|---|
+| `batchSize` | `16384` | Maximum batch size in bytes |
+| `lingerMs` | `0` | Time to wait before flushing a batch (ms) |
+| `compression` | `none` | Compression: `none`, `gzip`, `snappy`, `lz4`, `zstd` |
+| `acks` | `1` | Acknowledgments: `0`, `1`, `-1` (all) |
+| `retries` | `3` | Retries on transient failures |
+| `idempotent` | `false` | Enable exactly-once semantics |
+
+### Consumer
+
+| Parameter | Default | Description |
+|---|---|---|
+| `groupId` | *(required)* | Consumer group identifier |
+| `autoOffsetReset` | `latest` | Start position: `earliest`, `latest` |
+| `autoCommit` | `true` | Automatically commit offsets |
+| `autoCommitIntervalMs` | `5000` | Auto-commit interval (ms) |
+| `maxPollRecords` | `500` | Maximum records per poll |
+| `sessionTimeoutMs` | `30000` | Session timeout for group membership (ms) |
+
+### Security
+
+| Parameter | Default | Description |
+|---|---|---|
+| `tls.enabled` | `false` | Enable TLS encryption |
+| `tls.ca` | — | Path to CA certificate |
+| `sasl.mechanism` | — | SASL mechanism: `plain`, `scram-sha-256`, `scram-sha-512` |
+| `sasl.username` | — | SASL username |
+| `sasl.password` | — | SASL password |
+| `apiKey` | — | Bearer token for HTTP API authentication |
+
 ## Contributing
 
 Contributions are welcome! Please see the [organization contributing guide](https://github.com/streamlinelabs/.github/blob/main/CONTRIBUTING.md) for guidelines.

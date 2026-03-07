@@ -1,20 +1,17 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
-- feat: add TypeScript generic types for message values
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-- fix: handle reconnection in consumer group (2026-03-06)
-
-- test: add e2e tests for batch producer (2026-03-06)
-
-- refactor: improve TypeScript type exports (2026-03-06)
 ## [Unreleased]
 
-## [0.2.0] - 2026-02-28
+- feat: add TypeScript generic types for message values
+- fix: handle reconnection in consumer group (2026-03-06)
+- test: add e2e tests for batch producer (2026-03-06)
+- refactor: improve TypeScript type exports (2026-03-06)
 - **Fixed**: handle ECONNRESET in broker connection
 - **Changed**: update tsup build configuration
 - **Changed**: consolidate CJS and ESM entry points
@@ -28,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Update tsup configuration for tree shaking
 - Consolidate error handling in producer
+
 
 ## [0.2.0] - 2026-02-18
 
@@ -61,4 +59,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dual CJS + ESM output via tsup
 - Full TypeScript type definitions
 - Apache 2.0 license
-
