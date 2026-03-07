@@ -203,10 +203,11 @@ export class Streamline {
    * @param records - Array of records to produce
    * @returns Array of produce results
    */
-  async produceBatch(topic: string, records: ProduceRecord[]): Promise<ProduceResult[]> {
+  async produceBatch(topic: string, records: ProduceRecord[], options?: { compression?: string }): Promise<ProduceResult[]> {
+    const compression = options?.compression ?? 'none';
     const response = await this.graphql<{ produceBatch: ProduceResult[] }>(`
-      mutation ProduceBatch($topic: String!, $messages: [MessageInput!]!) {
-        produceBatch(topic: $topic, messages: $messages) {
+      mutation ProduceBatch($topic: String!, $messages: [MessageInput!]!, $compression: String) {
+        produceBatch(topic: $topic, messages: $messages, compression: $compression) {
           topic
           partition
           offset
@@ -215,6 +216,7 @@ export class Streamline {
       }
     `, {
       topic,
+      compression: compression !== 'none' ? compression : undefined,
       messages: records.map(r => ({
         value: typeof r.value === 'string' ? r.value : JSON.stringify(r.value),
         key: r.key,
@@ -240,15 +242,15 @@ export class Streamline {
    * @yields Messages from the topic
    */
   async *consume(topic: string, options: ConsumeOptions = {}): AsyncGenerator<Message> {
-    const { fromBeginning = false, fromOffset, maxMessages = 100, pollTimeout = 5000 } = options;
+    const { group, fromBeginning = false, fromOffset, maxMessages = 100, pollTimeout = 5000 } = options;
 
     let currentOffset = fromOffset ?? (fromBeginning ? 0 : undefined);
 
     while (this.connected) {
       try {
         const response = await this.graphql<{ messages: Message[] }>(`
-          query Messages($topic: String!, $partition: Int, $offset: Int, $limit: Int) {
-            messages(topic: $topic, partition: $partition, offset: $offset, limit: $limit) {
+          query Messages($topic: String!, $partition: Int, $offset: Int, $limit: Int, $group: String) {
+            messages(topic: $topic, partition: $partition, offset: $offset, limit: $limit, group: $group) {
               topic
               partition
               offset
@@ -265,6 +267,7 @@ export class Streamline {
           topic,
           offset: currentOffset,
           limit: maxMessages,
+          group: group ?? undefined,
         });
 
         const messages = response.messages;
@@ -498,6 +501,138 @@ export class Streamline {
   }
 
   // =========================================================================
+  // Admin Operations
+  // =========================================================================
+
+  /**
+   * Alter topic configuration.
+   *
+   * @param name - Topic name
+   * @param config - Configuration key-value pairs to set
+   */
+  async alterTopicConfig(name: string, config: Record<string, string>): Promise<void> {
+    const configEntries = Object.entries(config).map(([key, value]) => ({ key, value }));
+    await this.graphql(`
+      mutation AlterTopicConfig($name: String!, $config: [ConfigEntryInput!]!) {
+        alterTopicConfig(name: $name, config: $config)
+      }
+    `, { name, config: configEntries });
+  }
+
+  /**
+   * Increase the number of partitions for a topic.
+   *
+   * @param name - Topic name
+   * @param newTotal - New total number of partitions (must be greater than current)
+   */
+  async createPartitions(name: string, newTotal: number): Promise<void> {
+    if (newTotal < 1) {
+      throw new StreamlineError('Partition count must be at least 1', 'INVALID_ARGUMENT');
+    }
+    await this.graphql(`
+      mutation CreatePartitions($name: String!, $newTotal: Int!) {
+        createPartitions(name: $name, totalCount: $newTotal)
+      }
+    `, { name, newTotal });
+  }
+
+  /**
+   * Delete a consumer group.
+   *
+   * @param groupId - Consumer group ID
+   */
+  async deleteConsumerGroup(groupId: string): Promise<void> {
+    await this.graphql(`
+      mutation DeleteConsumerGroup($groupId: String!) {
+        deleteConsumerGroup(groupId: $groupId)
+      }
+    `, { groupId });
+  }
+
+  /**
+   * Reset consumer group offsets.
+   *
+   * @param groupId - Consumer group ID
+   * @param topic - Topic name
+   * @param options - Reset strategy
+   */
+  async resetConsumerGroupOffsets(
+    groupId: string,
+    topic: string,
+    options: { toEarliest?: boolean; toLatest?: boolean; toOffset?: number; toDatetime?: Date }
+  ): Promise<void> {
+    let strategy: string;
+    let value: string | undefined;
+
+    if (options.toEarliest) {
+      strategy = 'EARLIEST';
+    } else if (options.toLatest) {
+      strategy = 'LATEST';
+    } else if (options.toOffset !== undefined) {
+      strategy = 'TO_OFFSET';
+      value = String(options.toOffset);
+    } else if (options.toDatetime) {
+      strategy = 'TO_DATETIME';
+      value = options.toDatetime.toISOString();
+    } else {
+      throw new StreamlineError('Must specify one of: toEarliest, toLatest, toOffset, toDatetime', 'INVALID_ARGUMENT');
+    }
+
+    await this.graphql(`
+      mutation ResetOffsets($groupId: String!, $topic: String!, $strategy: String!, $value: String) {
+        resetConsumerGroupOffsets(groupId: $groupId, topic: $topic, strategy: $strategy, value: $value)
+      }
+    `, { groupId, topic, strategy, value });
+  }
+
+  /**
+   * Get cluster information including brokers and controller.
+   */
+  async describeCluster(): Promise<{ clusterId: string; controller: number; brokers: { id: number; host: string; port: number }[] }> {
+    const response = await this.graphql<{
+      cluster: { clusterId: string; controller: number; brokers: { id: number; host: string; port: number }[] };
+    }>(`
+      query {
+        cluster {
+          clusterId
+          controller
+          brokers {
+            id
+            host
+            port
+          }
+        }
+      }
+    `);
+    return response.cluster;
+  }
+
+  /**
+   * Get broker configuration.
+   *
+   * @param brokerId - Broker ID
+   * @returns Configuration key-value pairs
+   */
+  async describeBrokerConfig(brokerId: number): Promise<Record<string, string>> {
+    const response = await this.graphql<{
+      brokerConfig: { key: string; value: string }[];
+    }>(`
+      query BrokerConfig($brokerId: Int!) {
+        brokerConfig(brokerId: $brokerId) {
+          key
+          value
+        }
+      }
+    `, { brokerId });
+
+    const config: Record<string, string> = {};
+    for (const { key, value } of response.brokerConfig) {
+      config[key] = value;
+    }
+    return config;
+  }
+
+  // =========================================================================
   // SQL Queries
   // =========================================================================
 
@@ -644,4 +779,57 @@ export class Streamline {
   }
 }
 
-// add TypeScript generic types for message values
+/**
+ * Typed wrapper for producing and consuming messages with compile-time type safety.
+ *
+ * @example
+ * ```typescript
+ * interface UserEvent {
+ *   userId: string;
+ *   action: 'login' | 'logout';
+ *   timestamp: number;
+ * }
+ *
+ * const typed = new TypedStreamline<UserEvent>(client, 'user-events');
+ * await typed.produce({ userId: '123', action: 'login', timestamp: Date.now() });
+ *
+ * for await (const msg of typed.consume()) {
+ *   console.log(msg.value.userId); // TypeScript knows this is string
+ * }
+ * ```
+ */
+export class TypedStreamline<T> {
+  constructor(
+    private client: Streamline,
+    private topic: string,
+  ) {}
+
+  /** Produce a typed message. The value is JSON-serialized. */
+  async produce(value: T, options: { key?: string; headers?: Record<string, string> } = {}): Promise<ProduceResult> {
+    return this.client.produce(this.topic, value, options);
+  }
+
+  /** Consume typed messages. Values are parsed from JSON. */
+  async *consume(options: ConsumeOptions = {}): AsyncGenerator<TypedMessage<T>> {
+    for await (const msg of this.client.consume(this.topic, options)) {
+      yield {
+        ...msg,
+        value: msg.value as T,
+      };
+    }
+  }
+
+  /** Consume a batch of typed messages. */
+  async consumeBatch(options: ConsumeOptions = {}): Promise<TypedMessage<T>[]> {
+    const messages = await this.client.consumeBatch(this.topic, options);
+    return messages.map(msg => ({
+      ...msg,
+      value: msg.value as T,
+    }));
+  }
+}
+
+/** A message with a typed value. */
+export interface TypedMessage<T> extends Omit<Message, 'value'> {
+  value: T;
+}

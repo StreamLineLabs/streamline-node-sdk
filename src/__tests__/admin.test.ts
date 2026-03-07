@@ -16,45 +16,45 @@ describe('Admin', () => {
     expect(admin).toBeDefined();
   });
 
-  describe('not-yet-implemented methods', () => {
-    it('alterTopicConfig throws NOT_IMPLEMENTED', async () => {
+  describe('admin methods require server connection', () => {
+    it('alterTopicConfig rejects without server', async () => {
       await expect(
         admin.alterTopicConfig('test', { 'retention.ms': '86400000' })
-      ).rejects.toThrow(StreamlineError);
+      ).rejects.toThrow();
     });
 
-    it('createPartitions throws NOT_IMPLEMENTED', async () => {
-      await expect(admin.createPartitions('test', 6)).rejects.toThrow(
-        StreamlineError
+    it('createPartitions validates input', async () => {
+      await expect(admin.createPartitions('test', 0)).rejects.toThrow(
+        'Partition count must be at least 1'
       );
     });
 
-    it('deleteConsumerGroup throws NOT_IMPLEMENTED', async () => {
-      await expect(admin.deleteConsumerGroup('group')).rejects.toThrow(
-        StreamlineError
-      );
+    it('createPartitions rejects without server', async () => {
+      await expect(admin.createPartitions('test', 6)).rejects.toThrow();
     });
 
-    it('resetConsumerGroupOffsets throws NOT_IMPLEMENTED', async () => {
+    it('deleteConsumerGroup rejects without server', async () => {
+      await expect(admin.deleteConsumerGroup('group')).rejects.toThrow();
+    });
+
+    it('resetConsumerGroupOffsets validates strategy', async () => {
+      await expect(
+        admin.resetConsumerGroupOffsets('group', 'topic', {})
+      ).rejects.toThrow('Must specify one of');
+    });
+
+    it('resetConsumerGroupOffsets rejects without server', async () => {
       await expect(
         admin.resetConsumerGroupOffsets('group', 'topic', { toEarliest: true })
-      ).rejects.toThrow(StreamlineError);
+      ).rejects.toThrow();
     });
 
-    it('describeBrokerConfig throws NOT_IMPLEMENTED', async () => {
-      await expect(admin.describeBrokerConfig(0)).rejects.toThrow(
-        StreamlineError
-      );
+    it('describeBrokerConfig rejects without server', async () => {
+      await expect(admin.describeBrokerConfig(0)).rejects.toThrow();
     });
-  });
 
-  describe('describeCluster', () => {
-    it('returns cluster info', async () => {
-      const info = await admin.describeCluster();
-      expect(info).toBeDefined();
-      expect(info.clusterId).toBe('streamline');
-      expect(info.brokers).toHaveLength(1);
+    it('describeCluster rejects without server', async () => {
+      await expect(admin.describeCluster()).rejects.toThrow();
     });
   });
 });
-// migrate internal event emitter to typed events

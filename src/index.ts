@@ -24,7 +24,7 @@
  * @packageDocumentation
  */
 
-export { Streamline, StreamlineOptions, TlsOptions, SaslOptions } from './client';
+export { Streamline, StreamlineOptions, TlsOptions, SaslOptions, TypedStreamline, TypedMessage } from './client';
 export { SchemaRegistry, SchemaType, SchemaInfo } from './schema';
 export { Producer, ProducerConfig } from './producer';
 export { Consumer, ConsumerConfig } from './consumer';
@@ -35,6 +35,7 @@ export type { SchemaRegistryConfig, JsonSchemaSerializerOptions, AvroSchemaSeria
 export { SchemaProducer, SchemaConsumer, encodeWireFormat, decodeWireFormat } from './schema-producer';
 export type { SchemaProducerOptions, DeserializedMessage } from './schema-producer';
 export * from './types';
+export { CircuitBreaker, CircuitBreakerConfig, CircuitState } from './circuit-breaker';
 export { EmbeddedStreamline, EmbeddedConfig, EmbeddedMessage } from './embedded';
 export { AIClient, EmbeddingResult, SearchResult, AnomalyAlert, RAGResponse } from './ai';
 

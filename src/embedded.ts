@@ -101,7 +101,11 @@ export class EmbeddedStreamline {
     this.ensureOpen();
     const binding = this.native as { query: (sql: string) => string };
     const json = binding.query(sql);
-    return JSON.parse(json);
+    try {
+      return JSON.parse(json);
+    } catch {
+      throw new Error(`Failed to parse query response: ${json?.substring(0, 200)}`);
+    }
   }
 
   /** Close the instance and free resources. */

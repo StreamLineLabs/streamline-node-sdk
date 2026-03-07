@@ -103,8 +103,7 @@ export class Admin {
    * @param config - Configuration changes
    */
   async alterTopicConfig(name: string, config: Record<string, string>): Promise<void> {
-    // TODO: Implement via API
-    throw new StreamlineError('Topic config alteration not yet implemented', 'NOT_IMPLEMENTED');
+    await this.client.alterTopicConfig(name, config);
   }
 
   /**
@@ -114,8 +113,7 @@ export class Admin {
    * @param newTotal - New total number of partitions
    */
   async createPartitions(name: string, newTotal: number): Promise<void> {
-    // TODO: Implement via API
-    throw new StreamlineError('Partition creation not yet implemented', 'NOT_IMPLEMENTED');
+    await this.client.createPartitions(name, newTotal);
   }
 
   // =========================================================================
@@ -147,8 +145,7 @@ export class Admin {
    * @param groupId - Consumer group ID
    */
   async deleteConsumerGroup(groupId: string): Promise<void> {
-    // TODO: Implement via API
-    throw new StreamlineError('Consumer group deletion not yet implemented', 'NOT_IMPLEMENTED');
+    await this.client.deleteConsumerGroup(groupId);
   }
 
   /**
@@ -168,8 +165,7 @@ export class Admin {
       toDatetime?: Date;
     }
   ): Promise<void> {
-    // TODO: Implement via API
-    throw new StreamlineError('Offset reset not yet implemented', 'NOT_IMPLEMENTED');
+    await this.client.resetConsumerGroupOffsets(groupId, topic, options);
   }
 
   // =========================================================================
@@ -182,12 +178,8 @@ export class Admin {
    * @returns Cluster information
    */
   async describeCluster(): Promise<ClusterInfo> {
-    // TODO: Implement via API
-    return {
-      clusterId: 'streamline',
-      controller: 0,
-      brokers: [{ id: 0, host: 'localhost', port: 9092 }],
-    };
+    const result = await this.client.describeCluster();
+    return result;
   }
 
   /**
@@ -197,7 +189,6 @@ export class Admin {
    * @returns Broker configuration
    */
   async describeBrokerConfig(brokerId: number): Promise<Record<string, string>> {
-    // TODO: Implement via API
-    throw new StreamlineError('Broker config retrieval not yet implemented', 'NOT_IMPLEMENTED');
+    return this.client.describeBrokerConfig(brokerId);
   }
 }

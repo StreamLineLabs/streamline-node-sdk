@@ -133,9 +133,10 @@ export class Consumer implements AsyncIterable<Message> {
         continue;
       }
 
-      // Track offset
+      // Track offset and partition assignment
       const key = `${msg.topic}:${msg.partition}`;
       this.currentOffsets.set(key, msg.offset);
+      this.assignedPartitions.add(msg.partition);
 
       yield msg;
     }
@@ -196,9 +197,12 @@ export class Consumer implements AsyncIterable<Message> {
    * @param partitions - Partitions to seek (default: all assigned)
    */
   async seekToEnd(partitions?: number[]): Promise<void> {
-    // TODO: Get high watermarks from API
-    const _parts = partitions ?? Array.from(this.assignedPartitions);
-    // Would need to query for latest offsets
+    const parts = partitions ?? Array.from(this.assignedPartitions);
+    for (const p of parts) {
+      // Remove tracked offset so the next poll starts from latest
+      const key = `${this.topic}:${p}`;
+      this.currentOffsets.delete(key);
+    }
   }
 
   /**
