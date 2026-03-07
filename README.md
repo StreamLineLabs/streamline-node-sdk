@@ -494,3 +494,14 @@ See the [Security Policy](https://github.com/streamlinelabs/streamline/blob/main
 
 <!-- add JSDoc annotations for exported functions -->
 
+
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `STREAMLINE_BROKERS` | Comma-separated broker addresses | `localhost:9092` |
+| `STREAMLINE_CLIENT_ID` | Client identifier | `streamline-node-client` |
+| `STREAMLINE_REQUEST_TIMEOUT` | Request timeout in ms | `30000` |
+| `STREAMLINE_TLS_CA_PATH` | Path to CA certificate | — |
+| `STREAMLINE_SASL_MECHANISM` | SASL mechanism | — |
