@@ -223,3 +223,30 @@ export class TimeoutError extends StreamlineError {
   }
 }
 
+
+
+/**
+ * TLS verification modes for connection security.
+ */
+export enum TlsVerificationMode {
+  /** Full certificate verification (recommended for production). */
+  Full = 'full',
+  /** Skip hostname verification only. */
+  SkipHostname = 'skip-hostname',
+  /** No verification (development only, NOT for production). */
+  None = 'none',
+}
+
+/**
+ * Extended TLS options with verification mode control.
+ */
+export interface ExtendedTlsOptions {
+  /** CA certificate for server verification */
+  ca?: string | Buffer;
+  /** Client certificate for mutual TLS */
+  cert?: string | Buffer;
+  /** Client private key */
+  key?: string | Buffer;
+  /** Verification mode */
+  verification?: TlsVerificationMode;
+}
