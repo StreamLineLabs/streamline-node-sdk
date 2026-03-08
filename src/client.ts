@@ -57,6 +57,9 @@ export interface SaslOptions {
 /**
  * Client configuration options.
  */
+const DEFAULT_REQUEST_TIMEOUT = 30_000;
+const DEFAULT_HTTP_ENDPOINT = 'http://localhost:9094';
+
 export interface StreamlineOptions {
   /** HTTP endpoint for REST/GraphQL API (default: http://localhost:9094) */
   httpEndpoint?: string;
