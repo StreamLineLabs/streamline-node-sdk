@@ -30,6 +30,21 @@ export interface TlsOptions {
 /**
  * SASL authentication configuration.
  */
+/**
+ * Sanitizes and validates a broker list, removing duplicates and empty entries.
+ */
+function sanitizeBrokerList(brokers: string[]): string[] {
+  const cleaned = brokers
+    .map(b => b.trim())
+    .filter(b => b.length > 0);
+  
+  if (cleaned.length === 0) {
+    throw new ConnectionError('At least one broker address is required');
+  }
+  
+  return [...new Set(cleaned)];
+}
+
 export interface SaslOptions {
   /** SASL mechanism */
   mechanism: 'PLAIN' | 'SCRAM-SHA-256' | 'SCRAM-SHA-512';
