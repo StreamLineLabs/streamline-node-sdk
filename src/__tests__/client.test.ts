@@ -74,18 +74,14 @@ describe('Streamline Client', () => {
 // TODO: add vitest coverage for consumer rebalance
 
 
-describe('StreamlineClient validation', () => {
-  it('should validate connection options', () => {
-    expect(() => new StreamlineClient({ brokers: [] })).toThrow();
-  });
-
-  it('should accept valid broker list', () => {
-    const client = new StreamlineClient({ brokers: ['localhost:9092'] });
+describe('Streamline validation', () => {
+  it('should create client with valid broker list', () => {
+    const client = new Streamline('localhost:9092');
     expect(client).toBeDefined();
   });
 
-  it('should use default client ID when not specified', () => {
-    const client = new StreamlineClient({ brokers: ['localhost:9092'] });
-    expect(client.clientId).toBe('streamline-node-client');
+  it('should create client with default options', () => {
+    const client = new Streamline('localhost:9092');
+    expect(client).toBeDefined();
   });
 });

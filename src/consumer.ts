@@ -54,15 +54,15 @@ export interface RebalanceEvent {
 export class Consumer implements AsyncIterable<Message> {
   private client: Streamline;
   private topic: string;
-  private groupId?: string;
+  private groupId?: string | undefined;
   private config: Required<ConsumerConfig>;
   private currentOffsets: Map<string, number> = new Map();
   private committedOffsets: Map<string, number> = new Map();
   private paused: boolean = false;
   private closed: boolean = false;
-  private commitTimer?: ReturnType<typeof setInterval>;
+  private commitTimer?: ReturnType<typeof setInterval> | undefined;
   private assignedPartitions: Set<number> = new Set();
-  private rebalanceHandler?: (event: RebalanceEvent) => Promise<void>;
+
 
   /**
    * Create a new consumer.
@@ -210,7 +210,7 @@ export class Consumer implements AsyncIterable<Message> {
    *
    * @param partitions - Partitions to pause (default: all)
    */
-  pause(partitions?: number[]): void {
+  pause(_partitions?: number[]): void {
     this.paused = true;
   }
 
@@ -219,7 +219,7 @@ export class Consumer implements AsyncIterable<Message> {
    *
    * @param partitions - Partitions to resume (default: all)
    */
-  resume(partitions?: number[]): void {
+  resume(_partitions?: number[]): void {
     this.paused = false;
   }
 
@@ -229,7 +229,7 @@ export class Consumer implements AsyncIterable<Message> {
    * @param handler - Async function called on rebalance events
    */
   onRebalance(handler: (event: RebalanceEvent) => Promise<void>): void {
-    this.rebalanceHandler = handler;
+    void handler;
   }
 
   /**
@@ -280,6 +280,52 @@ export class Consumer implements AsyncIterable<Message> {
       } catch {
         // Best effort
       }
+    }
+  }
+
+  /**
+   * Poll for messages (batch fetch with timeout).
+   *
+   * Similar to Kafka's Consumer.poll(Duration), fetches up to maxRecords
+   * messages within the specified timeout.
+   *
+   * @param timeoutMs - Maximum time to wait for messages (default: 1000)
+   * @param maxRecords - Maximum records to return (default: config.maxPollRecords)
+   * @returns Array of messages
+   */
+  async poll(timeoutMs: number = 1000, maxRecords?: number): Promise<Message[]> {
+    if (this.closed) {
+      throw new StreamlineError('Consumer is closed', 'CONSUMER_CLOSED');
+    }
+
+    const limit = maxRecords ?? this.config.maxPollRecords;
+
+    try {
+      const messages = await this.client.consumeBatch(this.topic, {
+        group: this.groupId,
+        fromBeginning: this.config.autoOffsetReset === 'earliest',
+        maxMessages: limit,
+        pollTimeout: timeoutMs,
+      });
+
+      // Track offsets for each returned message
+      for (const msg of messages) {
+        const key = `${msg.topic}:${msg.partition}`;
+        this.currentOffsets.set(key, msg.offset);
+        this.assignedPartitions.add(msg.partition);
+      }
+
+      return messages;
+    } catch (error) {
+      if (error instanceof StreamlineError) {
+        throw error;
+      }
+      throw new StreamlineError(
+        'Poll failed',
+        'POLL_ERROR',
+        true,
+        error instanceof Error ? error : undefined,
+      );
     }
   }
 

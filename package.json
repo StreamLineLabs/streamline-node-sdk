@@ -20,7 +20,7 @@
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "test": "vitest run --exclude '**/conformance*'",
-    "test:conformance": "vitest run --testPathPattern conformance",
+    "test:conformance": "vitest run conformance",
     "test:watch": "vitest --exclude '**/conformance*'",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",

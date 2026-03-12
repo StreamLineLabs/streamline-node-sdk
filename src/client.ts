@@ -12,9 +12,14 @@ import {
   StreamlineError,
   ConnectionError,
 } from './types';
+import type { AuthConfig } from './auth';
+import type { TlsConfig } from './tls';
+import { CircuitBreaker, CircuitBreakerConfig } from './circuit-breaker';
 
 /**
  * TLS configuration for secure connections.
+ *
+ * @deprecated Use {@link TlsConfig} from `./tls` for first-class TLS support.
  */
 export interface TlsOptions {
   /** CA certificate (PEM string or Buffer) */
@@ -29,22 +34,9 @@ export interface TlsOptions {
 
 /**
  * SASL authentication configuration.
+ *
+ * @deprecated Use {@link AuthConfig} from `./auth` for first-class SASL support.
  */
-/**
- * Sanitizes and validates a broker list, removing duplicates and empty entries.
- */
-function sanitizeBrokerList(brokers: string[]): string[] {
-  const cleaned = brokers
-    .map(b => b.trim())
-    .filter(b => b.length > 0);
-  
-  if (cleaned.length === 0) {
-    throw new ConnectionError('At least one broker address is required');
-  }
-  
-  return [...new Set(cleaned)];
-}
-
 export interface SaslOptions {
   /** SASL mechanism */
   mechanism: 'PLAIN' | 'SCRAM-SHA-256' | 'SCRAM-SHA-512';
@@ -57,9 +49,6 @@ export interface SaslOptions {
 /**
  * Client configuration options.
  */
-const DEFAULT_REQUEST_TIMEOUT = 30_000;
-const DEFAULT_HTTP_ENDPOINT = 'http://localhost:9094';
-
 export interface StreamlineOptions {
   /** HTTP endpoint for REST/GraphQL API (default: http://localhost:9094) */
   httpEndpoint?: string;
@@ -71,6 +60,10 @@ export interface StreamlineOptions {
   tls?: boolean | TlsOptions;
   /** SASL authentication configuration */
   sasl?: SaslOptions;
+  /** First-class Streamline SASL authentication configuration. */
+  auth?: AuthConfig;
+  /** First-class Streamline TLS configuration. */
+  tlsConfig?: TlsConfig;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
   /** Auto-reconnect on connection loss (default: true) */
@@ -81,6 +74,8 @@ export interface StreamlineOptions {
   reconnectDelay?: number;
   /** Maximum reconnect delay in milliseconds (default: 30000) */
   maxReconnectDelay?: number;
+  /** Circuit breaker configuration (opt-in). Pass `true` for defaults or a config object. */
+  circuitBreaker?: boolean | CircuitBreakerConfig;
 }
 
 /**
@@ -88,7 +83,7 @@ export interface StreamlineOptions {
  */
 export interface ConsumeOptions {
   /** Consumer group ID */
-  group?: string;
+  group?: string | undefined;
   /** Start from beginning of topic */
   fromBeginning?: boolean;
   /** Start from specific offset */
@@ -119,9 +114,10 @@ export interface ConsumeOptions {
  * ```
  */
 export class Streamline {
-  private options: Omit<Required<StreamlineOptions>, 'sasl'> & { sasl?: SaslOptions };
+  private options: Omit<Required<StreamlineOptions>, 'sasl' | 'auth' | 'tlsConfig' | 'circuitBreaker'> & { sasl?: SaslOptions; auth?: AuthConfig; tlsConfig?: TlsConfig };
   private connected: boolean = false;
   private abortController?: AbortController;
+  private cb?: CircuitBreaker;
 
   /**
    * Create a new Streamline client.
@@ -136,12 +132,19 @@ export class Streamline {
       apiKey: options.apiKey ?? '',
       tls: options.tls ?? false,
       ...(options.sasl ? { sasl: options.sasl } : {}),
+      ...(options.auth ? { auth: options.auth } : {}),
+      ...(options.tlsConfig ? { tlsConfig: options.tlsConfig } : {}),
       timeout: options.timeout ?? 30000,
       autoReconnect: options.autoReconnect ?? true,
       maxReconnectAttempts: options.maxReconnectAttempts ?? 10,
       reconnectDelay: options.reconnectDelay ?? 1000,
       maxReconnectDelay: options.maxReconnectDelay ?? 30000,
     };
+
+    if (options.circuitBreaker) {
+      const cbConfig = options.circuitBreaker === true ? {} : options.circuitBreaker;
+      this.cb = new CircuitBreaker(cbConfig);
+    }
   }
 
   /**
@@ -714,7 +717,23 @@ export class Streamline {
       ...(init.headers as Record<string, string>),
     };
 
-    if (this.options.sasl) {
+    // First-class AuthConfig takes precedence over legacy sasl/apiKey
+    if (this.options.auth) {
+      const auth = this.options.auth;
+      switch (auth.mechanism) {
+        case 'PLAIN':
+        case 'SCRAM-SHA-256':
+        case 'SCRAM-SHA-512':
+          headers['X-Sasl-Mechanism'] = auth.mechanism;
+          headers['Authorization'] = `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString('base64')}`;
+          break;
+        case 'OAUTHBEARER': {
+          const token = await auth.oauthBearerProvider();
+          headers['Authorization'] = `Bearer ${token.value}`;
+          break;
+        }
+      }
+    } else if (this.options.sasl) {
       const { mechanism, username, password } = this.options.sasl;
       headers['X-Sasl-Mechanism'] = mechanism;
       headers['Authorization'] = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
@@ -727,11 +746,15 @@ export class Streamline {
     }
 
     try {
-      const response = await fetch(url, {
+      const doFetch = () => fetch(url, {
         ...init,
         headers,
         signal: this.abortController?.signal ?? null,
       });
+
+      const response = this.cb
+        ? await this.cb.execute(doFetch)
+        : await doFetch();
       return response;
     } catch (error) {
       throw new ConnectionError(

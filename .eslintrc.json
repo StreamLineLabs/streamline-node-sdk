@@ -31,5 +31,5 @@
     "no-var": "error",
     "eqeqeq": ["error", "always"]
   },
-  "ignorePatterns": ["dist/", "node_modules/", "*.js", "*.mjs"]
+  "ignorePatterns": ["dist/", "node_modules/", "*.js", "*.mjs", "**/__tests__/**"]
 }

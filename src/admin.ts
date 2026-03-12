@@ -3,7 +3,7 @@
  */
 
 import { Streamline } from './client';
-import { TopicInfo, ConsumerGroupInfo, ClusterInfo, StreamlineError } from './types';
+import { TopicInfo, ConsumerGroupInfo, ClusterInfo } from './types';
 
 /**
  * Topic configuration.
@@ -71,9 +71,9 @@ export class Admin {
    */
   async createTopic(name: string, config: TopicConfig = {}): Promise<void> {
     await this.client.createTopic(name, {
-      partitions: config.partitions,
-      replicationFactor: config.replicationFactor,
-      config: config.config,
+      ...(config.partitions !== undefined && { partitions: config.partitions }),
+      ...(config.replicationFactor !== undefined && { replicationFactor: config.replicationFactor }),
+      ...(config.config !== undefined && { config: config.config }),
     });
   }
 

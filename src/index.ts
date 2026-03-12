@@ -38,4 +38,13 @@ export * from './types';
 export { CircuitBreaker, CircuitBreakerConfig, CircuitState } from './circuit-breaker';
 export { EmbeddedStreamline, EmbeddedConfig, EmbeddedMessage } from './embedded';
 export { AIClient, EmbeddingResult, SearchResult, AnomalyAlert, RAGResponse } from './ai';
+export { ClientMetrics, MetricsSnapshot } from './metrics';
+
+// First-class auth and TLS configuration
+export { createSaslAuthenticator } from './auth';
+export type { AuthConfig, PlainAuth, ScramAuth, OAuthBearerAuth, OAuthBearerToken, SaslMechanism, SaslAuthenticator } from './auth';
+export { createTlsOptions, loadCertificateFromFile } from './tls';
+export type { TlsConfig } from './tls';
+export { validateConfig } from './config';
+export type { StreamlineClientConfig } from './config';
 
