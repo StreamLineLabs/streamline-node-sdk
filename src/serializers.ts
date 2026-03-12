@@ -73,7 +73,7 @@ export interface JsonSchemaSerializerOptions {
 
 export class JsonSchemaSerializer {
   private registry: SchemaRegistryClient;
-  private schema: Record<string, unknown> | undefined;
+
   private schemaStr: string | undefined;
   private autoRegister: boolean;
   private schemaId: number | undefined;
@@ -82,7 +82,6 @@ export class JsonSchemaSerializer {
     this.registry = new SchemaRegistryClient({
       url: options.schemaRegistryUrl ?? 'http://localhost:9094',
     });
-    this.schema = options.schema;
     this.schemaStr = options.schema ? JSON.stringify(options.schema) : undefined;
     this.autoRegister = options.autoRegister ?? true;
   }

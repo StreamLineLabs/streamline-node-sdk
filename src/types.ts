@@ -166,9 +166,9 @@ export class StreamlineError extends Error {
   /** Whether the error is retryable */
   retryable: boolean;
   /** Optional hint for resolving the error */
-  hint?: string;
+  hint?: string | undefined;
   /** Original cause if any */
-  cause?: Error;
+  override cause?: Error | undefined;
 
   constructor(message: string, code: string = 'UNKNOWN', retryable: boolean = false, cause?: Error, hint?: string) {
     super(hint ? `${message} (hint: ${hint})` : message);
