@@ -477,6 +477,24 @@ if (breaker.getState() === CircuitState.Open) {
 
 When the circuit is open, `execute()` throws a retryable `StreamlineError` with code `CIRCUIT_OPEN`. See the [Circuit Breaker guide](https://streamlinelabs.dev/docs/features/circuit-breaker) for details.
 
+## Examples
+
+The [`examples/`](examples/) directory contains runnable examples:
+
+| Example | Description |
+|---------|-------------|
+| [basic-usage.ts](examples/basic-usage.ts) | Produce, consume, and admin operations |
+| [query-usage.ts](examples/query-usage.ts) | SQL analytics with the embedded query engine |
+| [schema-registry.ts](examples/schema-registry.ts) | Schema registration and validation |
+| [circuit-breaker.ts](examples/circuit-breaker.ts) | Resilient production with circuit breaker |
+| [security.ts](examples/security.ts) | TLS and SASL authentication |
+
+Run any example:
+
+```bash
+npx tsx examples/basic-usage.ts
+```
+
 ## Contributing
 
 Contributions are welcome! Please see the [organization contributing guide](https://github.com/streamlinelabs/.github/blob/main/CONTRIBUTING.md) for guidelines.
