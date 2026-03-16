@@ -30,12 +30,14 @@ export { Producer, ProducerConfig } from './producer';
 export { Consumer, ConsumerConfig } from './consumer';
 export { Admin } from './admin';
 export { StreamlineTracing, TracingConfig } from './telemetry';
+export { TracedProducer, TracedConsumer } from './traced';
 export { JsonSchemaSerializer, AvroSchemaSerializer, SchemaRegistryClient } from './serializers';
 export type { SchemaRegistryConfig, JsonSchemaSerializerOptions, AvroSchemaSerializerOptions } from './serializers';
 export { SchemaProducer, SchemaConsumer, encodeWireFormat, decodeWireFormat } from './schema-producer';
 export type { SchemaProducerOptions, DeserializedMessage } from './schema-producer';
 export * from './types';
 export { CircuitBreaker, CircuitBreakerConfig, CircuitState } from './circuit-breaker';
+// Embedded mode is experimental and requires a native Rust build — see src/embedded.ts for details
 export { EmbeddedStreamline, EmbeddedConfig, EmbeddedMessage } from './embedded';
 export { AIClient, EmbeddingResult, SearchResult, AnomalyAlert, RAGResponse } from './ai';
 export { ClientMetrics, MetricsSnapshot } from './metrics';
