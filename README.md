@@ -75,6 +75,7 @@ main();
 - **Connection pooling**: Automatic connection management
 - **Reconnection**: Automatic reconnection with configurable backoff
 - **OpenTelemetry Tracing**: Optional distributed tracing for produce/consume operations
+- **Embedded Mode** *(experimental, requires native Rust build)* — Run Streamline in-process via N-API bindings. Not included in the npm package; see `src/embedded.ts` for build instructions
 
 ## OpenTelemetry Tracing
 
@@ -165,6 +166,26 @@ await client.produceBatch('topic', [
   { value: { event: 'c' }, partition: 2 },
 ]);
 ```
+
+### Transactions
+
+```typescript
+const producer = new Producer(client, 'orders');
+await producer.start();
+
+await producer.beginTransaction();
+try {
+  await producer.send({ key: 'k1', value: 'v1' });
+  await producer.send({ key: 'k2', value: 'v2' });
+  await producer.commitTransaction();
+} catch (err) {
+  await producer.abortTransaction();
+  throw err;
+}
+```
+
+> **Note:** Transactions use client-side buffering. Messages are collected and sent as a batch
+> on commit, providing all-or-nothing delivery at the client level.
 
 ### Consuming Messages
 

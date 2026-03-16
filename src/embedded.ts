@@ -1,13 +1,25 @@
 /**
- * Embedded Streamline instance for Node.js.
- * 
- * Uses N-API bindings to embed a Streamline server directly in the Node.js process.
- * Requires the native module to be built (see native/README.md).
- * 
+ * Embedded Streamline server running in-process via N-API native bindings.
+ *
+ * **⚠️ EXPERIMENTAL**: This module requires a native Rust binary that is NOT
+ * included in the published npm package. To use embedded mode:
+ *
+ * 1. Install Rust toolchain: https://rustup.rs
+ * 2. Build the native module: `cd native && npm run build`
+ * 3. The compiled `streamline.node` binary must be in the `native/` directory
+ *
+ * For most use cases, prefer the standard `Streamline` client connecting to
+ * a remote server, or use Docker for local development:
+ * ```
+ * docker run -d -p 9092:9092 -p 9094:9094 ghcr.io/streamlinelabs/streamline:latest
+ * ```
+ *
+ * @experimental
+ *
  * @example
  * ```typescript
  * import { EmbeddedStreamline } from 'streamline-sdk/embedded';
- * 
+ *
  * const instance = new EmbeddedStreamline({ inMemory: true });
  * await instance.produce('my-topic', Buffer.from('hello'));
  * const msg = await instance.consume('my-topic', 5000);
@@ -62,12 +74,19 @@ export class EmbeddedStreamline {
     if (!EmbeddedStreamline.isAvailable) {
       throw new Error(
         'Streamline native module not found. The embedded SDK requires ' +
-        'building the native N-API bindings from the Streamline Rust FFI layer.\n\n' +
-        'To build:\n' +
-        '  1. Install Rust: https://rustup.rs\n' +
-        '  2. Build libstreamline: cd streamline && cargo build --release --lib\n' +
-        '  3. Build N-API bindings: cd native && npm run build\n\n' +
-        'For non-embedded use, use the standard StreamlineClient instead.'
+        'a native Rust binary (native/streamline.node) that is NOT included ' +
+        'in the published npm package.\n\n' +
+        'To build the native module:\n' +
+        '  1. Install Rust toolchain: https://rustup.rs\n' +
+        '  2. Clone the Streamline repo and build libstreamline:\n' +
+        '     cd streamline && cargo build --release --lib\n' +
+        '  3. Build the N-API bindings:\n' +
+        '     cd native && npm run build\n\n' +
+        'For most use cases, prefer the standard Streamline client:\n' +
+        '  import { Streamline } from \'streamline\';\n' +
+        '  const client = new Streamline(\'localhost:9092\');\n\n' +
+        'Or run Streamline locally with Docker:\n' +
+        '  docker run -d -p 9092:9092 -p 9094:9094 ghcr.io/streamlinelabs/streamline:latest'
       );
     }
     // eslint-disable-next-line @typescript-eslint/no-var-requires
