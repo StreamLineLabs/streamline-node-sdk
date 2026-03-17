@@ -77,3 +77,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full TypeScript type definitions
 - Apache 2.0 license
 - test: add config schema validation test suite
+- test: add metrics reporting and collection tests
