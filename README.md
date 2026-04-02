@@ -6,6 +6,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue.svg)](https://www.typescriptlang.org/)
 [![Docs](https://img.shields.io/badge/docs-streamlinelabs.dev-blue.svg)](https://streamlinelabs.dev/docs/sdks/node)
+[![npm](https://img.shields.io/npm/v/@streamline/node.svg)](https://www.npmjs.com/package/@streamline/node)
 
 A developer-friendly TypeScript/Node.js SDK for [Streamline](https://github.com/streamlinelabs/streamline-node-sdk) - The Redis of Streaming.
 
@@ -514,6 +515,56 @@ Run any example:
 
 ```bash
 npx tsx examples/basic-usage.ts
+```
+
+## Moonshot Features
+
+> ⚠️ **Experimental** — These features require Streamline server 0.3.0+ with moonshot feature flags enabled.
+
+### Semantic Search
+
+Query topics by meaning instead of offset. Requires a topic created with `semantic.embed=true`.
+
+```typescript
+const results = await client.search('logs.app', 'payment failure', { k: 10 });
+for (const hit of results) {
+  console.log(`[p${hit.partition}] offset=${hit.offset} score=${hit.score.toFixed(2)}`);
+}
+```
+
+### Attestation Verification
+
+Verify cryptographic provenance attestations attached to records by data contracts.
+
+```typescript
+import { StreamlineVerifier } from 'streamline';
+
+const verifier = new StreamlineVerifier(publicKeyBytes);
+const result = verifier.verify(record);
+console.log(`Verified: ${result.verified}, Producer: ${result.producerId}`);
+```
+
+### Agent Memory (MCP)
+
+Use Streamline as persistent memory for AI agents via the MCP protocol.
+
+```typescript
+import { MemoryClient } from 'streamline';
+
+const memory = new MemoryClient('http://localhost:9094/mcp/v1');
+await memory.remember('user prefers dark mode', { tags: ['preferences'] });
+const results = await memory.recall('user preferences', { k: 5 });
+```
+
+### Branched Streams
+
+Create topic branches for replay, A/B testing, or counterfactual analysis.
+
+```typescript
+const branch = await admin.createBranch('events', 'experiment-v2');
+for await (const msg of client.consume(branch.topic)) {
+  process(msg);
+}
 ```
 
 ## Contributing

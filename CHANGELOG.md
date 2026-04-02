@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `src/moonshot.ts` — TypeScript clients for the Streamline Moonshot HTTP API
+  (port `9094`): `BranchesClient`, `ContractsClient`, `AttestationClient`,
+  `SearchClient`, `MemoryClient`. Shared `MoonshotOptions` + `MoonshotError`.
+- All clients ship as named exports from the package root.
+
+### Added
 - Circuit breaker pattern (`CircuitBreaker`) with configurable thresholds and async `execute()`
 - Circuit breaker test suite (13 tests covering state machine, async execution, error classification)
 - `TypedStreamline<T>` wrapper for compile-time typed produce/consume
