@@ -3,7 +3,7 @@
  */
 
 import { Streamline } from './client';
-import { TopicInfo, ConsumerGroupInfo, ClusterInfo } from './types';
+import { TopicInfo, ConsumerGroupInfo, ClusterInfo, BranchInfo, StreamlineError } from './types';
 
 /**
  * Topic configuration.
@@ -48,6 +48,10 @@ export class Admin {
    */
   constructor(client: Streamline) {
     this.client = client;
+  }
+
+  private get httpUrl(): string {
+    return (this.client as any).options?.httpEndpoint ?? 'http://localhost:9094';
   }
 
   // =========================================================================
@@ -190,5 +194,86 @@ export class Admin {
    */
   async describeBrokerConfig(brokerId: number): Promise<Record<string, string>> {
     return this.client.describeBrokerConfig(brokerId);
+  }
+
+  // =========================================================================
+  // Branch Management (M5, Experimental)
+  // =========================================================================
+
+  /**
+   * Create a copy-on-write branch of a topic.
+   *
+   * @param name - Branch name
+   * @param baseTopic - Topic to branch from
+   * @param baseOffsets - Per-partition base offsets (optional)
+   * @returns Branch information
+   */
+  async createBranch(
+    name: string,
+    baseTopic: string,
+    baseOffsets?: Record<number, number>,
+  ): Promise<BranchInfo> {
+    const body: Record<string, unknown> = { name, base_topic: baseTopic };
+    if (baseOffsets) {
+      body['base_offsets'] = baseOffsets;
+    }
+    const resp = await fetch(`${this.httpUrl}/api/v1/branches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new StreamlineError(`Failed to create branch: HTTP ${resp.status}: ${text}`);
+    }
+    const data = await resp.json() as Record<string, unknown>;
+    return {
+      name: (data['name'] as string) ?? name,
+      baseTopic: (data['base_topic'] as string) ?? baseTopic,
+      state: (data['state'] as string) ?? 'active',
+      createdAt: Number(data['created_at'] ?? 0),
+    };
+  }
+
+  /**
+   * List copy-on-write topic branches.
+   *
+   * @param topic - Filter by base topic (optional)
+   * @returns Array of branch info objects
+   */
+  async listBranches(topic?: string): Promise<BranchInfo[]> {
+    let path = '/api/v1/branches';
+    if (topic) {
+      path += `?topic=${encodeURIComponent(topic)}`;
+    }
+    const resp = await fetch(`${this.httpUrl}${path}`);
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new StreamlineError(`Failed to list branches: HTTP ${resp.status}: ${text}`);
+    }
+    const data = await resp.json() as Record<string, unknown>;
+    const items: unknown[] = Array.isArray(data) ? data : ((data['items'] as unknown[]) ?? []);
+    return items.map((b: any) => ({
+      name: String(b.name ?? ''),
+      baseTopic: String(b.base_topic ?? ''),
+      state: String(b.state ?? 'active'),
+      createdAt: Number(b.created_at ?? 0),
+    }));
+  }
+
+  /**
+   * Discard (delete) a copy-on-write topic branch.
+   *
+   * @param branchId - Branch identifier
+   */
+  async discardBranch(branchId: string): Promise<void> {
+    const resp = await fetch(
+      `${this.httpUrl}/api/v1/branches/${encodeURIComponent(branchId)}`,
+      { method: 'DELETE' },
+    );
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new StreamlineError(`Failed to discard branch: HTTP ${resp.status}: ${text}`);
+    }
   }
 }

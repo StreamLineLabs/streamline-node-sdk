@@ -3,7 +3,7 @@
  */
 
 import { Streamline, ConsumeOptions } from './client';
-import { Message, StreamlineError } from './types';
+import { Message, StreamlineError, SearchOptions, SearchResult } from './types';
 
 /**
  * Consumer configuration.
@@ -327,6 +327,45 @@ export class Consumer implements AsyncIterable<Message> {
         error instanceof Error ? error : undefined,
       );
     }
+  }
+
+  /**
+   * Search a topic using semantic search via the HTTP API.
+   *
+   * @param topic - Topic to search
+   * @param query - Free-text search query
+   * @param options - Optional search configuration (k for max results)
+   * @returns Array of search results ordered by descending score
+   */
+  async search(
+    topic: string,
+    query: string,
+    options?: SearchOptions,
+  ): Promise<SearchResult[]> {
+    const k = options?.k ?? 10;
+    const response = await (this.client as any).request(
+      `/api/v1/topics/${encodeURIComponent(topic)}/search`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, k }),
+      },
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new StreamlineError(
+        `Search failed: ${error}`,
+        'SEARCH_ERROR',
+        true,
+      );
+    }
+
+    const data = (await response.json()) as {
+      hits?: SearchResult[];
+      took_ms?: number;
+    };
+    return data.hits ?? [];
   }
 
   private sleep(ms: number): Promise<void> {

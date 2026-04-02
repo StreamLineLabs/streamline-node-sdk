@@ -59,6 +59,28 @@ export interface ProduceResult {
 }
 
 /**
+ * Options for topic search.
+ */
+export interface SearchOptions {
+  /** Maximum number of results (default: 10) */
+  k?: number;
+}
+
+/**
+ * A single search result from a topic.
+ */
+export interface SearchResult {
+  /** Partition the hit came from */
+  partition: number;
+  /** Offset of the matching record */
+  offset: number;
+  /** Similarity score (higher = more relevant) */
+  score: number;
+  /** Record value, if returned by the server */
+  value: unknown;
+}
+
+/**
  * Topic information.
  */
 export interface TopicInfo {
@@ -151,6 +173,20 @@ export interface BrokerInfo {
 }
 
 /**
+ * Information about a copy-on-write topic branch (M5).
+ */
+export interface BranchInfo {
+  /** Branch name */
+  name: string;
+  /** The base topic this branch forks from */
+  baseTopic: string;
+  /** Branch state (active, discarded, merged) */
+  state: string;
+  /** Creation timestamp (epoch milliseconds) */
+  createdAt: number;
+}
+
+/**
  * Query result row.
  */
 export interface QueryRow {
@@ -223,7 +259,55 @@ export class TimeoutError extends StreamlineError {
   }
 }
 
+/**
+ * Raised when a record violates a topic's data contract.
+ */
+export class ContractViolationError extends StreamlineError {
+  constructor(topic: string, details: string) {
+    super(`Contract violation on topic '${topic}': ${details}`, 'CONTRACT_VIOLATION', false, undefined, 'Validate the record against the topic\'s registered schema');
+    this.name = 'ContractViolationError';
+  }
+}
 
+/**
+ * Raised when attestation signature verification fails.
+ */
+export class AttestationVerificationError extends StreamlineError {
+  constructor(message: string) {
+    super(message, 'ATTESTATION_VERIFICATION_FAILED', false, undefined, 'Check the signing key and attestation configuration');
+    this.name = 'AttestationVerificationError';
+  }
+}
+
+/**
+ * Raised when an agent lacks permission to access memory.
+ */
+export class MemoryAccessDeniedError extends StreamlineError {
+  constructor(agent: string) {
+    super(`Memory access denied for agent: ${agent}`, 'MEMORY_ACCESS_DENIED', false, undefined, 'Verify agent permissions for memory operations');
+    this.name = 'MemoryAccessDeniedError';
+  }
+}
+
+/**
+ * Raised when a branch exceeds its storage or lifetime quota.
+ */
+export class BranchQuotaExceededError extends StreamlineError {
+  constructor(branch: string, details: string) {
+    super(`Branch quota exceeded for '${branch}': ${details}`, 'BRANCH_QUOTA_EXCEEDED', false, undefined, 'Increase branch quotas or clean up unused branches');
+    this.name = 'BranchQuotaExceededError';
+  }
+}
+
+/**
+ * Raised when semantic search is unavailable (embedding provider down).
+ */
+export class SemanticSearchUnavailableError extends StreamlineError {
+  constructor(message: string) {
+    super(message, 'SEMANTIC_SEARCH_UNAVAILABLE', true, undefined, 'Check embedding provider connectivity and configuration');
+    this.name = 'SemanticSearchUnavailableError';
+  }
+}
 
 /**
  * TLS verification modes for connection security.

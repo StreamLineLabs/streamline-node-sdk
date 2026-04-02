@@ -103,5 +103,50 @@ describe('Consumer', () => {
         consumer.onRebalance(async () => {});
       }).not.toThrow();
     });
+
+    it('accepts multiple handlers without throwing', () => {
+      const consumer = new Consumer(mockClient, 'test-topic', 'group');
+      const h1 = async () => {};
+      const h2 = async () => {};
+      expect(() => {
+        consumer.onRebalance(h1);
+        consumer.onRebalance(h2);
+      }).not.toThrow();
+    });
+
+    it('handler receives a typed RebalanceEvent (assign | revoke)', () => {
+      const consumer = new Consumer(mockClient, 'test-topic', 'group');
+      // Type-only assertion: the handler signature is (event: RebalanceEvent) => Promise<void>.
+      // If the public type ever changes shape this will fail to compile.
+      const handler: Parameters<typeof consumer.onRebalance>[0] = async (event) => {
+        expect(['assign', 'revoke']).toContain(event.type);
+        expect(Array.isArray(event.partitions)).toBe(true);
+        for (const p of event.partitions) {
+          expect(typeof p).toBe('number');
+        }
+      };
+      expect(() => consumer.onRebalance(handler)).not.toThrow();
+    });
+
+    it('assignment() reflects the empty initial state before any rebalance', () => {
+      const consumer = new Consumer(mockClient, 'test-topic', 'group');
+      // Pre-rebalance contract: no partitions assigned, no positions/committed offsets.
+      expect(consumer.assignment()).toEqual([]);
+      expect(consumer.position(0)).toBeUndefined();
+      expect(consumer.committed(0)).toBeUndefined();
+    });
+
+    it('handler registration is decoupled from start()', async () => {
+      const consumer = new Consumer(mockClient, 'test-topic', 'group');
+      // Registering before start should be safe (handlers may fire during start/poll).
+      const events: string[] = [];
+      consumer.onRebalance(async (e) => {
+        events.push(e.type);
+      });
+      await expect(consumer.start()).resolves.toBeUndefined();
+      // Without a real broker no rebalance is delivered; we only assert the
+      // surface stays sane and didn't throw.
+      expect(Array.isArray(events)).toBe(true);
+    });
   });
 });

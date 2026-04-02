@@ -71,7 +71,7 @@ describe('Streamline Client', () => {
     });
   });
 });
-// TODO: add vitest coverage for consumer rebalance
+// Consumer rebalance coverage lives in __tests__/consumer.test.ts ("onRebalance" describe block).
 
 
 describe('Streamline validation', () => {

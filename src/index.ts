@@ -28,6 +28,7 @@ export { Streamline, StreamlineOptions, TlsOptions, SaslOptions, TypedStreamline
 export { SchemaRegistry, SchemaType, SchemaInfo } from './schema';
 export { Producer, ProducerConfig } from './producer';
 export { Consumer, ConsumerConfig } from './consumer';
+export type { SearchOptions, SearchResult } from './types';
 export { Admin } from './admin';
 export { StreamlineTracing, TracingConfig } from './telemetry';
 export { TracedProducer, TracedConsumer } from './traced';
@@ -39,7 +40,7 @@ export * from './types';
 export { CircuitBreaker, CircuitBreakerConfig, CircuitState } from './circuit-breaker';
 // Embedded mode is experimental and requires a native Rust build — see src/embedded.ts for details
 export { EmbeddedStreamline, EmbeddedConfig, EmbeddedMessage } from './embedded';
-export { AIClient, EmbeddingResult, SearchResult, AnomalyAlert, RAGResponse } from './ai';
+export { AIClient, EmbeddingResult, AnomalyAlert, RAGResponse } from './ai';
 export { ClientMetrics, MetricsSnapshot } from './metrics';
 
 // First-class auth and TLS configuration
@@ -49,4 +50,11 @@ export { createTlsOptions, loadCertificateFromFile } from './tls';
 export type { TlsConfig } from './tls';
 export { validateConfig } from './config';
 export type { StreamlineClientConfig } from './config';
+
+// Local attestation verifier
+export { StreamlineVerifier, ATTEST_HEADER } from './verifier';
+export type { VerificationResult } from './verifier';
+
+// Moonshot HTTP clients (Experimental — wraps broker /api/v1/* admin/AI APIs)
+export * from './moonshot';
 
