@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.3.0] - 2026-04-20
+
 ### Added
 - `src/moonshot.ts` — TypeScript clients for the Streamline Moonshot HTTP API
   (port `9094`): `BranchesClient`, `ContractsClient`, `AttestationClient`,

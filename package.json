@@ -1,6 +1,6 @@
 {
   "name": "streamline",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Node.js SDK for Streamline - The AI-Native Streaming Platform",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
