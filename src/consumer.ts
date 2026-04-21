@@ -3,7 +3,7 @@
  */
 
 import { Streamline, ConsumeOptions } from './client';
-import { Message, StreamlineError, SearchOptions, SearchResult } from './types';
+import { Message, StreamlineError, SearchOptions, SearchResult, validateTopicName } from './types';
 
 /**
  * Consumer configuration.
@@ -78,6 +78,7 @@ export class Consumer implements AsyncIterable<Message> {
     groupId?: string,
     config: ConsumerConfig = {}
   ) {
+    validateTopicName(topic);
     this.client = client;
     this.topic = topic;
     this.groupId = groupId;

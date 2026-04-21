@@ -3,7 +3,7 @@
  */
 
 import { Streamline } from './client';
-import { TopicInfo, ConsumerGroupInfo, ClusterInfo, BranchInfo, StreamlineError } from './types';
+import { TopicInfo, ConsumerGroupInfo, ClusterInfo, BranchInfo, StreamlineError, validateTopicName } from './types';
 
 /**
  * Topic configuration.
@@ -74,6 +74,7 @@ export class Admin {
    * @param config - Topic configuration
    */
   async createTopic(name: string, config: TopicConfig = {}): Promise<void> {
+    validateTopicName(name);
     await this.client.createTopic(name, {
       ...(config.partitions !== undefined && { partitions: config.partitions }),
       ...(config.replicationFactor !== undefined && { replicationFactor: config.replicationFactor }),
@@ -87,6 +88,7 @@ export class Admin {
    * @param name - Topic name
    */
   async deleteTopic(name: string): Promise<void> {
+    validateTopicName(name);
     await this.client.deleteTopic(name);
   }
 

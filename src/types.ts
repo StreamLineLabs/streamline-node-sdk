@@ -310,6 +310,78 @@ export class SemanticSearchUnavailableError extends StreamlineError {
 }
 
 /**
+ * Validate a Kafka topic name according to the Kafka specification.
+ *
+ * Rules: non-empty, max 249 characters, alphanumeric plus '.', '_', '-',
+ * and cannot be exactly "." or "..".
+ *
+ * @param topic - Topic name to validate
+ * @throws {StreamlineError} If the topic name is invalid
+ */
+export function validateTopicName(topic: string): void {
+  if (!topic || topic.length === 0) {
+    throw new StreamlineError(
+      'Topic name cannot be empty',
+      'INVALID_TOPIC',
+      false,
+      undefined,
+      'Provide a non-empty topic name',
+    );
+  }
+
+  if (topic.length > 249) {
+    throw new StreamlineError(
+      `Topic name exceeds maximum length of 249 characters`,
+      'INVALID_TOPIC',
+      false,
+      undefined,
+      'Use a shorter topic name (max 249 characters)',
+    );
+  }
+
+  if (topic === '.' || topic === '..') {
+    throw new StreamlineError(
+      `Topic name cannot be "${topic}"`,
+      'INVALID_TOPIC',
+      false,
+      undefined,
+      'Use a descriptive topic name with alphanumeric characters',
+    );
+  }
+
+  if (!/^[a-zA-Z0-9._-]+$/.test(topic)) {
+    throw new StreamlineError(
+      `Topic name contains invalid characters: "${topic}"`,
+      'INVALID_TOPIC',
+      false,
+      undefined,
+      'Topic names may only contain alphanumeric characters, dots, underscores, and hyphens',
+    );
+  }
+}
+
+/**
+ * Calculate exponential backoff with jitter.
+ *
+ * Uses the formula: min(maxMs, baseMs * 2^attempt) * (0.5 + random * 0.5)
+ * The jitter prevents thundering herd problems when many clients retry simultaneously.
+ *
+ * @param baseMs - Base backoff in milliseconds
+ * @param attempt - Zero-based attempt number
+ * @param maxMs - Maximum backoff in milliseconds
+ * @returns Backoff duration in milliseconds
+ */
+export function calculateExponentialBackoff(
+  baseMs: number,
+  attempt: number,
+  maxMs: number,
+): number {
+  const exponential = Math.min(maxMs, baseMs * Math.pow(2, attempt));
+  const jitter = 0.5 + Math.random() * 0.5;
+  return exponential * jitter;
+}
+
+/**
  * TLS verification modes for connection security.
  */
 export enum TlsVerificationMode {

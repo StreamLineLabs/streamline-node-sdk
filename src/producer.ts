@@ -4,7 +4,7 @@
 
 import { Streamline } from './client';
 import { CircuitBreaker } from './circuit-breaker';
-import { ProduceRecord, ProduceResult, StreamlineError } from './types';
+import { ProduceRecord, ProduceResult, StreamlineError, validateTopicName, calculateExponentialBackoff } from './types';
 
 /**
  * Producer configuration.
@@ -20,6 +20,8 @@ export interface ProducerConfig {
   retries?: number;
   /** Retry backoff in ms (default: 100) */
   retryBackoffMs?: number;
+  /** Maximum retry backoff in ms (default: 30000) */
+  maxRetryBackoffMs?: number;
   /** Enable idempotent producer (default: true) */
   idempotent?: boolean;
   /** Optional circuit breaker for resilient sending. */
@@ -58,7 +60,7 @@ interface PendingRecord {
 export class Producer {
   private client: Streamline;
   private topic: string;
-  private config: Required<Omit<ProducerConfig, 'circuitBreaker'>>;
+  private config: Required<Omit<ProducerConfig, 'circuitBreaker' | 'maxRetryBackoffMs'>> & { maxRetryBackoffMs: number };
   private batch: PendingRecord[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private circuitBreaker: CircuitBreaker | undefined;
@@ -75,6 +77,7 @@ export class Producer {
    * @param config - Producer configuration
    */
   constructor(client: Streamline, topic: string, config: ProducerConfig = {}) {
+    validateTopicName(topic);
     this.client = client;
     this.topic = topic;
     this.circuitBreaker = config.circuitBreaker;
@@ -84,6 +87,7 @@ export class Producer {
       compression: config.compression ?? 'none',
       retries: config.retries ?? 3,
       retryBackoffMs: config.retryBackoffMs ?? 100,
+      maxRetryBackoffMs: config.maxRetryBackoffMs ?? 30000,
       idempotent: config.idempotent ?? true,
     };
   }
@@ -305,7 +309,12 @@ export class Producer {
         this.circuitBreaker?.recordFailure();
 
         if (attempt < this.config.retries) {
-          await this.sleep(this.config.retryBackoffMs * (attempt + 1));
+          const backoff = calculateExponentialBackoff(
+            this.config.retryBackoffMs,
+            attempt,
+            this.config.maxRetryBackoffMs,
+          );
+          await this.sleep(backoff);
         }
       }
     }

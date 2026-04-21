@@ -29,6 +29,7 @@ export { SchemaRegistry, SchemaType, SchemaInfo } from './schema';
 export { Producer, ProducerConfig } from './producer';
 export { Consumer, ConsumerConfig } from './consumer';
 export type { SearchOptions, SearchResult } from './types';
+export { validateTopicName, calculateExponentialBackoff } from './types';
 export { Admin } from './admin';
 export { StreamlineTracing, TracingConfig } from './telemetry';
 export { TracedProducer, TracedConsumer } from './traced';
