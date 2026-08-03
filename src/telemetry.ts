@@ -31,6 +31,9 @@
  * @packageDocumentation
  */
 
+import { isRecord } from './internal/guards';
+import { loadOptionalModule, moduleDir } from './internal/optional-module';
+
 // OTel types (used only for type annotations when the package is available)
 interface OtelApi {
   trace: {
@@ -69,16 +72,46 @@ interface OtelSpan {
 
 interface OtelContext {}
 
-/** Whether @opentelemetry/api is available */
-let otelApi: OtelApi | null = null;
+/**
+ * Structurally validate a dynamically loaded `@opentelemetry/api` module.
+ *
+ * Only the members this SDK actually uses are checked, so a partial or
+ * unexpected build degrades to "tracing disabled" instead of crashing at the
+ * first span.
+ *
+ * @internal Exported for testing.
+ */
+export function isOtelApi(value: unknown): value is OtelApi {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const trace = value['trace'];
+  const context = value['context'];
+  const propagation = value['propagation'];
+  return (
+    isRecord(trace) &&
+    typeof trace['getTracer'] === 'function' &&
+    typeof trace['setSpan'] === 'function' &&
+    isRecord(context) &&
+    typeof context['active'] === 'function' &&
+    typeof context['with'] === 'function' &&
+    isRecord(propagation) &&
+    typeof propagation['inject'] === 'function' &&
+    typeof propagation['extract'] === 'function' &&
+    isRecord(value['SpanKind']) &&
+    isRecord(value['SpanStatusCode'])
+  );
+}
 
-try {
-  // Dynamic import to avoid hard dependency
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  otelApi = require('@opentelemetry/api');
-} catch {
-  // @opentelemetry/api not installed -- tracing disabled
-  otelApi = null;
+/** The resolved `@opentelemetry/api` module, or `null` when unavailable. */
+const otelApi: OtelApi | null = resolveOtelApi();
+
+function resolveOtelApi(): OtelApi | null {
+  const mod = loadOptionalModule(
+    '@opentelemetry/api',
+    moduleDir(typeof __dirname === 'string' ? __dirname : undefined),
+  );
+  return isOtelApi(mod) ? mod : null;
 }
 
 /**
@@ -123,7 +156,7 @@ export class StreamlineTracing {
       enabled,
     } = config;
 
-    this._enabled = enabled !== undefined ? enabled : otelApi !== null;
+    this._enabled = enabled ?? otelApi !== null;
 
     if (this._enabled && otelApi) {
       this.tracer = otelApi.trace.getTracer(tracerName, tracerVersion);
@@ -179,7 +212,7 @@ export class StreamlineTracing {
 
     try {
       const result = await otelApi.context.with(ctx, () => action());
-      span.setStatus({ code: otelApi!.SpanStatusCode.OK });
+      span.setStatus({ code: otelApi.SpanStatusCode.OK });
       return result;
     } catch (error) {
       span.setStatus({
@@ -225,7 +258,7 @@ export class StreamlineTracing {
 
     try {
       const result = await otelApi.context.with(ctx, () => action());
-      span.setStatus({ code: otelApi!.SpanStatusCode.OK });
+      span.setStatus({ code: otelApi.SpanStatusCode.OK });
       return result;
     } catch (error) {
       span.setStatus({
@@ -290,7 +323,7 @@ export class StreamlineTracing {
 
     try {
       const result = await otelApi.context.with(ctx, () => action());
-      span.setStatus({ code: otelApi!.SpanStatusCode.OK });
+      span.setStatus({ code: otelApi.SpanStatusCode.OK });
       return result;
     } catch (error) {
       span.setStatus({
@@ -334,4 +367,3 @@ export class StreamlineTracing {
     return otelApi.propagation.extract(otelApi.context.active(), headers);
   }
 }
-

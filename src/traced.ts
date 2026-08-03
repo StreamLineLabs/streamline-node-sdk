@@ -168,7 +168,7 @@ export class TracedConsumer implements AsyncIterable<Message> {
         msg.partition,
         msg.offset,
         headers,
-        async () => msg,
+        () => Promise.resolve(msg),
       );
     }
   }

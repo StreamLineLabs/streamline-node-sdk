@@ -4,6 +4,30 @@
 
 import { Streamline } from './client';
 import { TopicInfo, ConsumerGroupInfo, ClusterInfo, BranchInfo, StreamlineError, validateTopicName } from './types';
+import { coerceNumber, coerceString, isRecord, toRecordArray } from './internal/guards';
+
+/**
+ * Wire shape of a branch object returned by `/api/v1/branches`.
+ */
+interface BranchWire {
+  name?: unknown;
+  base_topic?: unknown;
+  state?: unknown;
+  created_at?: unknown;
+}
+
+/**
+ * Map a `/api/v1/branches` payload entry onto the public {@link BranchInfo}
+ * shape, applying defaults for fields the broker omits.
+ */
+function toBranchInfo(wire: BranchWire, defaults: Partial<BranchInfo> = {}): BranchInfo {
+  return {
+    name: coerceString(wire.name, defaults.name ?? ''),
+    baseTopic: coerceString(wire.base_topic, defaults.baseTopic ?? ''),
+    state: coerceString(wire.state, defaults.state ?? 'active'),
+    createdAt: coerceNumber(wire.created_at, defaults.createdAt ?? 0),
+  };
+}
 
 /**
  * Topic configuration.
@@ -51,7 +75,7 @@ export class Admin {
   }
 
   private get httpUrl(): string {
-    return (this.client as any).options?.httpEndpoint ?? 'http://localhost:9094';
+    return this.client.httpEndpoint;
   }
 
   // =========================================================================
@@ -228,13 +252,9 @@ export class Admin {
       const text = await resp.text();
       throw new StreamlineError(`Failed to create branch: HTTP ${resp.status}: ${text}`);
     }
-    const data = await resp.json() as Record<string, unknown>;
-    return {
-      name: (data['name'] as string) ?? name,
-      baseTopic: (data['base_topic'] as string) ?? baseTopic,
-      state: (data['state'] as string) ?? 'active',
-      createdAt: Number(data['created_at'] ?? 0),
-    };
+    const data: unknown = await resp.json();
+    const wire: BranchWire = isRecord(data) ? data : {};
+    return toBranchInfo(wire, { name, baseTopic, state: 'active', createdAt: 0 });
   }
 
   /**
@@ -253,14 +273,9 @@ export class Admin {
       const text = await resp.text();
       throw new StreamlineError(`Failed to list branches: HTTP ${resp.status}: ${text}`);
     }
-    const data = await resp.json() as Record<string, unknown>;
-    const items: unknown[] = Array.isArray(data) ? data : ((data['items'] as unknown[]) ?? []);
-    return items.map((b: any) => ({
-      name: String(b.name ?? ''),
-      baseTopic: String(b.base_topic ?? ''),
-      state: String(b.state ?? 'active'),
-      createdAt: Number(b.created_at ?? 0),
-    }));
+    const data: unknown = await resp.json();
+    const items = Array.isArray(data) ? data : (isRecord(data) ? data['items'] : []);
+    return toRecordArray(items).map((branch) => toBranchInfo(branch));
   }
 
   /**

@@ -4,6 +4,7 @@
 
 import { Streamline, ConsumeOptions } from './client';
 import { Message, StreamlineError, SearchOptions, SearchResult, validateTopicName } from './types';
+import { fromSync } from './internal/async';
 
 /**
  * Consumer configuration.
@@ -95,16 +96,18 @@ export class Consumer implements AsyncIterable<Message> {
   /**
    * Start the consumer.
    */
-  async start(): Promise<void> {
-    this.closed = false;
+  start(): Promise<void> {
+    return fromSync(() => {
+      this.closed = false;
 
-    if (this.config.autoCommit) {
-      this.commitTimer = setInterval(() => {
-        this.commit().catch(() => {
-          // Best effort
-        });
-      }, this.config.autoCommitIntervalMs);
-    }
+      if (this.config.autoCommit) {
+        this.commitTimer = setInterval(() => {
+          this.commit().catch(() => {
+            // Best effort
+          });
+        }, this.config.autoCommitIntervalMs);
+      }
+    });
   }
 
   /**
@@ -175,9 +178,11 @@ export class Consumer implements AsyncIterable<Message> {
    * @param partition - Partition number
    * @param offset - Offset to seek to
    */
-  async seek(partition: number, offset: number): Promise<void> {
-    const key = `${this.topic}:${partition}`;
-    this.currentOffsets.set(key, offset);
+  seek(partition: number, offset: number): Promise<void> {
+    return fromSync(() => {
+      const key = `${this.topic}:${partition}`;
+      this.currentOffsets.set(key, offset);
+    });
   }
 
   /**
@@ -197,13 +202,15 @@ export class Consumer implements AsyncIterable<Message> {
    *
    * @param partitions - Partitions to seek (default: all assigned)
    */
-  async seekToEnd(partitions?: number[]): Promise<void> {
-    const parts = partitions ?? Array.from(this.assignedPartitions);
-    for (const p of parts) {
-      // Remove tracked offset so the next poll starts from latest
-      const key = `${this.topic}:${p}`;
-      this.currentOffsets.delete(key);
-    }
+  seekToEnd(partitions?: number[]): Promise<void> {
+    return fromSync(() => {
+      const parts = partitions ?? Array.from(this.assignedPartitions);
+      for (const p of parts) {
+        // Remove tracked offset so the next poll starts from latest
+        const key = `${this.topic}:${p}`;
+        this.currentOffsets.delete(key);
+      }
+    });
   }
 
   /**
@@ -344,7 +351,7 @@ export class Consumer implements AsyncIterable<Message> {
     options?: SearchOptions,
   ): Promise<SearchResult[]> {
     const k = options?.k ?? 10;
-    const response = await (this.client as any).request(
+    const response = await this.client.request(
       `/api/v1/topics/${encodeURIComponent(topic)}/search`,
       {
         method: 'POST',

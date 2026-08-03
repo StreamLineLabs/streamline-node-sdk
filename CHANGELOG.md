@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `npm run build` no longer fails resolving the optional native addon. The
+  embedded-mode binding (`native/streamline.node`) and the optional
+  `@opentelemetry/api` peer are now loaded at runtime via `createRequire`, so
+  the bundler never treats them as build-time dependencies and resolution works
+  from both the CJS and ESM outputs.
+- `package.json` `exports` now lists the `types` condition first, so TypeScript
+  consumers on `node16`/`bundler` module resolution actually pick up the
+  bundled declarations.
+- Branch admin (`Admin.createBranch`/`listBranches`) and AI anomaly alerts no
+  longer surface `NaN` timestamps, `"[object Object]"` names, or `undefined`
+  fields when the broker returns a partial or unexpected payload.
+- `JsonSchemaSerializer`/`AvroSchemaSerializer` `deserialize()` now reject with
+  a descriptive `TypeError` when a payload decodes to valid JSON that is not an
+  object, instead of returning a value that does not match its declared type.
+  `EmbeddedStreamline.query()` likewise rejects when the addon returns JSON that
+  is not an array, instead of resolving a non-array as `unknown[]`.
+
+### Added
+- `Streamline.httpEndpoint` — read-only accessor for the resolved HTTP endpoint.
+- `Streamline.request()` — authenticated HTTP escape hatch used by `Admin` and
+  `Consumer`; marked `@internal`, prefer the typed operations.
+
+### Changed
+- Internal-only: wire payloads and optional module loading are narrowed through
+  typed guards (`src/internal/`) instead of `any`, and synchronous public
+  methods (`Streamline.close`, `Producer.start`/`beginTransaction`/
+  `abortTransaction`, `Consumer.start`/`seek`/`seekToEnd`,
+  `EmbeddedStreamline.produce`/`consume`/`createTopic`/`query`) return promises
+  without being declared `async`. All signatures and rejection behaviour are
+  unchanged.
+
 
 ## [0.3.0] - 2026-04-20
 

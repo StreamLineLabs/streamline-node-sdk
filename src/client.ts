@@ -15,6 +15,7 @@ import {
 import type { AuthConfig } from './auth';
 import type { TlsConfig } from './tls';
 import { CircuitBreaker, CircuitBreakerConfig } from './circuit-breaker';
+import { fromSync } from './internal/async';
 
 /**
  * TLS configuration for secure connections.
@@ -169,11 +170,23 @@ export class Streamline {
   }
 
   /**
+   * HTTP endpoint used for the REST and GraphQL APIs.
+   *
+   * Resolved once at construction time from the `httpEndpoint` option, the
+   * `STREAMLINE_URL` environment variable, or the default `http://localhost:9094`.
+   */
+  get httpEndpoint(): string {
+    return this.options.httpEndpoint;
+  }
+
+  /**
    * Close the client connection.
    */
-  async close(): Promise<void> {
-    this.connected = false;
-    this.abortController?.abort();
+  close(): Promise<void> {
+    return fromSync(() => {
+      this.connected = false;
+      this.abortController?.abort();
+    });
   }
 
   // =========================================================================
@@ -711,7 +724,16 @@ export class Streamline {
   // Internal Methods
   // =========================================================================
 
-  private async request(path: string, init: RequestInit = {}): Promise<Response> {
+  /**
+   * Perform an authenticated request against the broker's HTTP API.
+   *
+   * Applies the configured authentication headers, client id, abort signal and
+   * circuit breaker. Exposed for first-party helpers such as {@link Admin} and
+   * {@link Consumer}; prefer the typed operations on this class.
+   *
+   * @internal
+   */
+  async request(path: string, init: RequestInit = {}): Promise<Response> {
     const url = `${this.options.httpEndpoint}${path}`;
     const headers: Record<string, string> = {
       ...(init.headers as Record<string, string>),

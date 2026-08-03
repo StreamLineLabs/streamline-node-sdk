@@ -5,6 +5,7 @@
 import { Streamline } from './client';
 import { CircuitBreaker } from './circuit-breaker';
 import { ProduceRecord, ProduceResult, StreamlineError, validateTopicName, calculateExponentialBackoff } from './types';
+import { fromSync } from './internal/async';
 
 /**
  * Producer configuration.
@@ -106,8 +107,10 @@ export class Producer {
   /**
    * Start the producer.
    */
-  async start(): Promise<void> {
-    this.closed = false;
+  start(): Promise<void> {
+    return fromSync(() => {
+      this.closed = false;
+    });
   }
 
   /**
@@ -179,15 +182,17 @@ export class Producer {
    * Begin a new transaction. Messages sent after this call are buffered
    * until commitTransaction() or abortTransaction() is called.
    */
-  async beginTransaction(): Promise<void> {
-    if (this.closed) {
-      throw new StreamlineError('Producer is closed', 'PRODUCER_CLOSED');
-    }
-    if (this.inTransaction) {
-      throw new StreamlineError('Transaction already in progress', 'TRANSACTION_IN_PROGRESS');
-    }
-    this.inTransaction = true;
-    this.transactionBuffer = [];
+  beginTransaction(): Promise<void> {
+    return fromSync(() => {
+      if (this.closed) {
+        throw new StreamlineError('Producer is closed', 'PRODUCER_CLOSED');
+      }
+      if (this.inTransaction) {
+        throw new StreamlineError('Transaction already in progress', 'TRANSACTION_IN_PROGRESS');
+      }
+      this.inTransaction = true;
+      this.transactionBuffer = [];
+    });
   }
 
   /**
@@ -228,19 +233,21 @@ export class Producer {
   /**
    * Abort the current transaction, discarding all buffered messages.
    */
-  async abortTransaction(): Promise<void> {
-    if (!this.inTransaction) {
-      throw new StreamlineError('No transaction in progress', 'NO_TRANSACTION');
-    }
+  abortTransaction(): Promise<void> {
+    return fromSync(() => {
+      if (!this.inTransaction) {
+        throw new StreamlineError('No transaction in progress', 'NO_TRANSACTION');
+      }
 
-    // Reject all buffered promises
-    const err = new StreamlineError('Transaction aborted', 'TRANSACTION_ABORTED');
-    for (const p of this.transactionBuffer) {
-      p.reject(err);
-    }
+      // Reject all buffered promises
+      const err = new StreamlineError('Transaction aborted', 'TRANSACTION_ABORTED');
+      for (const p of this.transactionBuffer) {
+        p.reject(err);
+      }
 
-    this.inTransaction = false;
-    this.transactionBuffer = [];
+      this.inTransaction = false;
+      this.transactionBuffer = [];
+    });
   }
 
   private flushNow(): void {
