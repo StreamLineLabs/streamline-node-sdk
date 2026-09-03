@@ -120,6 +120,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   introduced by the newer HTTP metadata shape remain optional, so object
   literals using the exact earlier `TopicInfo`, `ConsumerGroupInfo`, and
   `ClusterInfo` shapes still compile.
+- **Conformance suite was always skipped.** `describe.skipIf(!serverAvailable)`
+  is evaluated at collection time, but the flag was assigned in `beforeAll`, so
+  it was always `false` and every conformance test was skipped — including in CI
+  with a healthy server. Availability is now resolved before collection, and
+  `STREAMLINE_CONFORMANCE_REQUIRE=1` (defaulted on when `CI` is set) turns an
+  unreachable server into a failing test instead of a silent skip. The CI and
+  integration workflows set it.
+- The conformance suite used `ConsumeOptions` fields that do not exist
+  (`offset`, `fromTimestamp`, `maxWaitMs`) and the nonexistent server field
+  `partitionCount`; it now prefers `TopicInfo.partitions`, falls back to the
+  legacy `partitionCount` alias, and is type-checked.
 - Core GraphQL documents now match the pinned Streamline 0.3 schema:
   `produceMessage`/`ProduceInput`, selected `createTopic` results, actual topic
   fields, `consumerGroups`, and `clusterInfo`. `produceBatch()` is implemented

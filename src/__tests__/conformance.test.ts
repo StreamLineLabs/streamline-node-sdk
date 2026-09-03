@@ -9,6 +9,9 @@
  * Environment variables:
  *   STREAMLINE_BOOTSTRAP  — Kafka-protocol address  (default: localhost:9092)
  *   STREAMLINE_HTTP       — HTTP / GraphQL address   (default: http://localhost:9094)
+ *   STREAMLINE_CONFORMANCE_REQUIRE — when truthy ('1'/'true'), an unreachable
+ *     server is a hard failure instead of a skip. Defaults to on whenever `CI`
+ *     is set, so a broken fixture can never be reported as a green run.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Streamline } from '../client';
@@ -20,13 +23,14 @@ import {
   StreamlineError,
   ConnectionError,
   TimeoutError,
+  UnsupportedOperationError,
 } from '../types';
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const BOOTSTRAP = process.env.STREAMLINE_BOOTSTRAP ?? 'localhost:9092';
-const HTTP_URL = process.env.STREAMLINE_HTTP ?? 'http://localhost:9094';
+const BOOTSTRAP = process.env['STREAMLINE_BOOTSTRAP'] ?? 'localhost:9092';
+const HTTP_URL = process.env['STREAMLINE_HTTP'] ?? 'http://localhost:9094';
 const TIMEOUT = 30_000;
 
 /** Generate a unique topic name for a given test ID. */
@@ -34,11 +38,21 @@ function uniqueTopic(testId: string): string {
   return `conformance-${testId}-${Date.now()}`;
 }
 
-// ---------------------------------------------------------------------------
-// Server availability check — skip the entire suite when unreachable
-// ---------------------------------------------------------------------------
-let serverAvailable = false;
+/** Parse a truthy environment flag. */
+function envFlag(value: string | undefined): boolean | undefined {
+  if (value === undefined || value === '') return undefined;
+  return value === '1' || value.toLowerCase() === 'true';
+}
 
+// ---------------------------------------------------------------------------
+// Server availability check
+//
+// This *must* be resolved before the `describe` callbacks run, because
+// `describe.skipIf(...)` is evaluated during collection. Setting the flag from
+// a `beforeAll` hook (as this suite previously did) always evaluated `false`
+// and silently skipped the entire suite — including on CI with a healthy
+// server. Top-level await runs during collection, so the value is real.
+// ---------------------------------------------------------------------------
 async function checkServer(): Promise<boolean> {
   try {
     const res = await fetch(`${HTTP_URL}/health`, { signal: AbortSignal.timeout(3_000) });
@@ -48,8 +62,28 @@ async function checkServer(): Promise<boolean> {
   }
 }
 
-beforeAll(async () => {
-  serverAvailable = await checkServer();
+const REQUIRE_SERVER =
+  envFlag(process.env['STREAMLINE_CONFORMANCE_REQUIRE']) ??
+  envFlag(process.env['CI']) ??
+  false;
+
+const serverAvailable = await checkServer();
+
+// ===========================================================================
+// Fixture gate — fails (not skips) when the server is declared mandatory
+// ===========================================================================
+describe('Conformance fixture', () => {
+  it('reaches the Streamline server when it is required', () => {
+    if (!REQUIRE_SERVER) {
+      expect(typeof serverAvailable).toBe('boolean');
+      return;
+    }
+    expect(
+      serverAvailable,
+      `Streamline server at ${HTTP_URL} is unreachable but STREAMLINE_CONFORMANCE_REQUIRE/CI is set. ` +
+        'Start it with: docker compose -f docker-compose.test.yml up -d --wait',
+    ).toBe(true);
+  });
 });
 
 // ===========================================================================
@@ -133,20 +167,17 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       expect(messages.length).toBe(10);
     });
 
-    it('P05: Compression — gzip round-trip', async () => {
+    it('P05: Compression — unsupported HTTP option fails explicitly', async () => {
       const topic = uniqueTopic('P05');
       await client.createTopic(topic, { partitions: 1 });
 
-      const result = await client.produce(
-        topic,
-        { message: 'compressed-payload' },
-        { compression: 'gzip' },
-      );
-      expect(result.offset).toBeGreaterThanOrEqual(0);
-
-      const messages = await client.consumeBatch(topic, { maxMessages: 1, fromBeginning: true });
-      expect(messages.length).toBe(1);
-      expect(messages[0].value).toContain('compressed-payload');
+      await expect(
+        client.produceBatch(
+          topic,
+          [{ value: { message: 'compressed-payload' } }],
+          { compression: 'gzip' },
+        ),
+      ).rejects.toThrow(/not supported/);
     });
 
     it('P06: Partitioner — explicit partition assignment', async () => {
@@ -157,13 +188,19 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       expect(r.partition).toBe(2);
     });
 
-    it('P07: Idempotent — idempotent producer', async () => {
+    it('P07: Delivery semantics — retries are at-least-once, idempotence is rejected', async () => {
       const topic = uniqueTopic('P07');
       await client.createTopic(topic, { partitions: 1 });
 
-      const r1 = await client.produce(topic, { message: 'idempotent-1' });
-      const r2 = await client.produce(topic, { message: 'idempotent-2' });
+      const r1 = await client.produce(topic, { message: 'at-least-once-1' });
+      const r2 = await client.produce(topic, { message: 'at-least-once-2' });
       expect(r2.offset).toBeGreaterThan(r1.offset);
+
+      // The HTTP produce API carries no producer id / sequence number, so the
+      // SDK refuses to claim idempotence rather than silently ignoring it.
+      expect(() => new Producer(client, topic, { idempotent: true })).toThrow(
+        /not supported/,
+      );
     });
 
     it('P08: Timeout — produce to unreachable broker', async () => {
@@ -196,9 +233,13 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       await client.createTopic(topic, { partitions: 1 });
       await client.produce(topic, { message: 'subscribe-test' });
 
-      const consumer = new Consumer(client, topic, 'c01-group');
+      const consumer = new Consumer(client, topic, undefined, {
+        autoCommit: false,
+        autoOffsetReset: 'earliest',
+      });
       await consumer.start();
-      expect(consumer).toBeDefined();
+      const messages = await consumer.poll(5_000, 1);
+      expect(messages).toHaveLength(1);
       await consumer.close();
     });
 
@@ -227,7 +268,7 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
 
       const messages = await client.consumeBatch(topic, {
         maxMessages: 5,
-        offset: 5,
+        fromOffset: 5,
       });
       expect(messages.length).toBeLessThanOrEqual(5);
       if (messages.length > 0) {
@@ -235,7 +276,7 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       }
     });
 
-    it('C04: From Timestamp — consume from a timestamp', async () => {
+    it('C04: From Timestamp — filter by timestamp client-side', async () => {
       const topic = uniqueTopic('C04');
       await client.createTopic(topic, { partitions: 1 });
 
@@ -243,19 +284,24 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       const timestamp = Date.now();
       await client.produce(topic, { message: 'after' });
 
+      // The broker API exposes offsets, not timestamp lookup, so the SDK
+      // does not pretend to support `fromTimestamp`: filter client-side.
       const messages = await client.consumeBatch(topic, {
         maxMessages: 10,
-        fromTimestamp: timestamp,
+        fromBeginning: true,
       });
-      // Should get at least the message produced after the timestamp
-      expect(messages.length).toBeGreaterThanOrEqual(1);
+      const after = messages.filter((m) => m.timestamp >= timestamp);
+      expect(after.length).toBeGreaterThanOrEqual(1);
     });
 
     it('C05: Follow — live-tail new messages', async () => {
       const topic = uniqueTopic('C05');
       await client.createTopic(topic, { partitions: 1 });
 
-      const consumer = new Consumer(client, topic, `c05-${Date.now()}`);
+      const consumer = new Consumer(client, topic, undefined, {
+        autoCommit: false,
+        autoOffsetReset: 'earliest',
+      });
       await consumer.start();
 
       // Produce after subscribing
@@ -287,12 +333,20 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
         fromBeginning: true,
       });
       const filtered = allMessages.filter((m) => {
+        let value: unknown = m.value;
         try {
-          const parsed = JSON.parse(m.value as string);
-          return parsed.even === true;
+          if (typeof value === 'string') {
+            value = JSON.parse(value);
+          }
         } catch {
           return false;
         }
+        return (
+          typeof value === 'object' &&
+          value !== null &&
+          'even' in value &&
+          value.even === true
+        );
       });
       expect(filtered.length).toBe(5);
     });
@@ -321,7 +375,7 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       const messages = await client.consumeBatch(topic, {
         maxMessages: 1,
         fromBeginning: true,
-        maxWaitMs: 2_000,
+        pollTimeout: 2_000,
       });
       const elapsed = Date.now() - start;
 
@@ -387,221 +441,110 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       expect(topics).not.toContain(topic);
     });
 
-    it('D05: Alter Config — update retention', async () => {
+    it('D05: Alter Config — unsupported operation fails explicitly', async () => {
       const topic = uniqueTopic('D05');
       await admin.createTopic(topic, { partitions: 1 });
 
-      await admin.alterTopicConfig(topic, { 'retention.ms': '86400000' });
-
-      // Verify the topic still exists after alter
-      const info = await admin.describeTopic(topic);
-      expect(info).toBeDefined();
+      await expect(
+        admin.alterTopicConfig(topic, { 'retention.ms': '86400000' }),
+      ).rejects.toThrow(/not supported/);
     });
 
-    it('D06: Create Partitions — increase partition count', async () => {
+    it('D06: Create Partitions — unsupported operation fails explicitly', async () => {
       const topic = uniqueTopic('D06');
       await admin.createTopic(topic, { partitions: 2 });
 
-      await admin.createPartitions(topic, 4);
+      await expect(admin.createPartitions(topic, 4)).rejects.toThrow(/not supported/);
 
       const info = await admin.describeTopic(topic);
       expect(info).toBeDefined();
-      expect(info!.partitions).toBeGreaterThanOrEqual(4);
+      expect(info!.partitions).toBe(2);
     });
 
-    it('D07: Describe Cluster — returns broker info', async () => {
+    it('D07: Describe Cluster — returns Streamline 0.3 cluster info', async () => {
       const cluster = await admin.describeCluster();
       expect(cluster).toBeDefined();
-      expect(cluster.clusterId).toBeDefined();
-      expect(cluster.brokers.length).toBeGreaterThanOrEqual(1);
-      expect(cluster.brokers[0].id).toBeGreaterThanOrEqual(0);
-      expect(cluster.brokers[0].host).toBeDefined();
-      expect(cluster.brokers[0].port).toBeGreaterThan(0);
+      expect(cluster.nodeId).toBeGreaterThanOrEqual(0);
+      expect(cluster.version).toMatch(/^\d+\.\d+\.\d+/);
+      expect(cluster.uptime).toBeGreaterThanOrEqual(0);
+      expect(cluster.topicCount).toBeGreaterThanOrEqual(1);
     });
 
-    it('D08: Broker Config — describe broker configuration', async () => {
-      const cluster = await admin.describeCluster();
-      const brokerId = cluster.brokers[0].id;
-
-      const config = await admin.describeBrokerConfig(brokerId);
-      expect(config).toBeDefined();
-      expect(typeof config).toBe('object');
+    it('D08: Broker Config — unsupported operation fails explicitly', async () => {
+      await expect(admin.describeBrokerConfig(0)).rejects.toThrow(/not supported/);
     });
   });
 
   // =========================================================================
-  // Consumer Groups (G01-G08)
+  // Consumer-group operations unsupported by the HTTP transport (G01-G08)
   // =========================================================================
-  describe('Consumer Groups', { timeout: TIMEOUT }, () => {
+  describe('Unsupported Consumer Groups', { timeout: TIMEOUT }, () => {
     let client: Streamline;
-    let admin: Admin;
 
     beforeAll(async () => {
       client = new Streamline(BOOTSTRAP, { httpEndpoint: HTTP_URL });
       await client.connect();
-      admin = new Admin(client);
     });
 
     afterAll(async () => {
       await client.close();
     });
 
-    it('G01: Join Group — consumer joins a group', async () => {
+    it('G01: Batch group option is rejected instead of ignored', async () => {
       const topic = uniqueTopic('G01');
-      await client.createTopic(topic, { partitions: 2 });
-      await client.produce(topic, { message: 'g01' });
-
-      const consumer = new Consumer(client, topic, `g01-${Date.now()}`);
-      await consumer.start();
-
-      const groups = await admin.listConsumerGroups();
-      expect(groups.length).toBeGreaterThanOrEqual(1);
-
-      await consumer.close();
+      await client.createTopic(topic, { partitions: 1 });
+      await expect(
+        client.consumeBatch(topic, { group: `g01-${Date.now()}` }),
+      ).rejects.toThrow(/not supported/);
     });
 
-    it('G02: Rebalance — adding consumer triggers rebalance', async () => {
+    it('G02: Streaming group option is rejected instead of ignored', async () => {
       const topic = uniqueTopic('G02');
-      const groupId = `g02-${Date.now()}`;
-      await client.createTopic(topic, { partitions: 2 });
-      await client.produce(topic, { message: 'g02' });
-
-      const c1 = new Consumer(client, topic, groupId);
-      await c1.start();
-
-      const c2 = new Consumer(client, topic, groupId);
-      await c2.start();
-
-      // Both consumers should be alive
-      expect(c1).toBeDefined();
-      expect(c2).toBeDefined();
-
-      await c2.close();
-      await c1.close();
+      await client.createTopic(topic, { partitions: 1 });
+      const iterator = client.consume(topic, { group: `g02-${Date.now()}` });
+      await expect(iterator.next()).rejects.toThrow(/not supported/);
     });
 
-    it('G03: Commit Offsets — manual offset commit', async () => {
+    it('G03: Manual offset commit fails explicitly', async () => {
       const topic = uniqueTopic('G03');
       const groupId = `g03-${Date.now()}`;
-      await client.createTopic(topic, { partitions: 1 });
-
-      for (let i = 0; i < 5; i++) {
-        await client.produce(topic, { index: i });
-      }
-
       const consumer = new Consumer(client, topic, groupId);
-      await consumer.start();
-
-      // Consume some messages then commit
-      await consumer.commit();
-
-      await consumer.close();
+      await expect(
+        consumer.commit(new Map([[`${topic}:0`, 1]])),
+      ).rejects.toThrow(/not supported/);
     });
 
-    it('G04: Lag Monitoring — group lag is reported', async () => {
+    it('G04: Rebalance handler registration fails explicitly', () => {
       const topic = uniqueTopic('G04');
-      const groupId = `g04-${Date.now()}`;
-      await client.createTopic(topic, { partitions: 1 });
-
-      // Produce messages
-      for (let i = 0; i < 10; i++) {
-        await client.produce(topic, { index: i });
-      }
-
-      // Create consumer, consume some, commit
-      const consumer = new Consumer(client, topic, groupId);
-      await consumer.start();
-      await consumer.commit();
-
-      const info = await admin.describeConsumerGroup(groupId);
-      expect(info).toBeDefined();
-      expect(info!.state).toBeDefined();
-
-      await consumer.close();
+      const consumer = new Consumer(client, topic, `g04-${Date.now()}`);
+      expect(() => consumer.onRebalance(async () => {})).toThrow(/not supported/);
     });
 
-    it('G05: Reset Offsets — seek to beginning', async () => {
+    it('G05: Admin offset reset fails explicitly', async () => {
       const topic = uniqueTopic('G05');
       const groupId = `g05-${Date.now()}`;
-      await client.createTopic(topic, { partitions: 1 });
-
-      for (let i = 0; i < 5; i++) {
-        await client.produce(topic, { index: i });
-      }
-
-      // Consume and commit at some offset
-      const consumer = new Consumer(client, topic, groupId);
-      await consumer.start();
-      await consumer.commit();
-      await consumer.close();
-
-      // Reset offsets to earliest
-      await admin.resetConsumerGroupOffsets(groupId, topic, { toEarliest: true });
-
-      // Should be able to re-consume from beginning
-      const messages = await client.consumeBatch(topic, {
-        maxMessages: 5,
-        fromBeginning: true,
-      });
-      expect(messages.length).toBe(5);
+      const admin = new Admin(client);
+      await expect(
+        admin.resetConsumerGroupOffsets(groupId, topic, { toEarliest: true }),
+      ).rejects.toThrow(/not supported/);
     });
 
-    it('G06: Leave Group — close triggers group leave', async () => {
+    it('G06: Partition seek fails explicitly', async () => {
       const topic = uniqueTopic('G06');
-      const groupId = `g06-${Date.now()}`;
-      await client.createTopic(topic, { partitions: 1 });
-      await client.produce(topic, { message: 'g06' });
-
-      const consumer = new Consumer(client, topic, groupId);
-      await consumer.start();
-
-      const infoBefore = await admin.describeConsumerGroup(groupId);
-      expect(infoBefore).toBeDefined();
-
-      await consumer.close();
-
-      // After close, group may transition to empty
-      const infoAfter = await admin.describeConsumerGroup(groupId);
-      if (infoAfter) {
-        expect(infoAfter.members?.length ?? 0).toBe(0);
-      }
+      const consumer = new Consumer(client, topic);
+      await expect(consumer.seek(0, 1)).rejects.toThrow(/not supported/);
     });
 
-    it('G07: Delete Group — admin deletes consumer group', async () => {
+    it('G07: Seek to beginning fails explicitly', async () => {
       const topic = uniqueTopic('G07');
-      const groupId = `g07-${Date.now()}`;
-      await client.createTopic(topic, { partitions: 1 });
-      await client.produce(topic, { message: 'g07' });
-
-      const consumer = new Consumer(client, topic, groupId);
-      await consumer.start();
-      await consumer.close();
-
-      await admin.deleteConsumerGroup(groupId);
-
-      const groups = await admin.listConsumerGroups();
-      expect(groups).not.toContain(groupId);
+      const consumer = new Consumer(client, topic);
+      await expect(consumer.seekToBeginning()).rejects.toThrow(/not supported/);
     });
 
-    it('G08: Multiple Groups — independent offset tracking', async () => {
+    it('G08: Seek to end fails explicitly', async () => {
       const topic = uniqueTopic('G08');
-      await client.createTopic(topic, { partitions: 1 });
-
-      for (let i = 0; i < 5; i++) {
-        await client.produce(topic, { index: i });
-      }
-
-      const c1 = new Consumer(client, topic, `g08a-${Date.now()}`);
-      const c2 = new Consumer(client, topic, `g08b-${Date.now()}`);
-      await c1.start();
-      await c2.start();
-
-      // Both groups should be independent
-      const groups = await admin.listConsumerGroups();
-      expect(groups.length).toBeGreaterThanOrEqual(2);
-
-      await c2.close();
-      await c1.close();
+      const consumer = new Consumer(client, topic);
+      await expect(consumer.seekToEnd()).rejects.toThrow(/not supported/);
     });
   });
 
@@ -609,20 +552,24 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
   // Authentication (A01-A06)
   // =========================================================================
   describe('Authentication', { timeout: TIMEOUT }, () => {
-    it('A01: TLS Connect — client constructs with TLS options', () => {
-      const tlsClient = new Streamline(BOOTSTRAP, {
+    it('A01: TLS Connect — rejectUnauthorized:false is rejected, never silently ignored', () => {
+      // This transport never applies TLS options to its fetch() requests, so
+      // accepting rejectUnauthorized:false would silently do nothing instead
+      // of the certificate-verification relaxation the caller asked for.
+      expect(() => new Streamline(BOOTSTRAP, {
         httpEndpoint: HTTP_URL,
         tls: { rejectUnauthorized: false },
-      });
-      expect(tlsClient).toBeDefined();
+      })).toThrow(UnsupportedOperationError);
     });
 
-    it('A02: Mutual TLS — mTLS config accepted', () => {
-      const mtlsClient = new Streamline(BOOTSTRAP, {
+    it('A02: Mutual TLS — mTLS config is rejected, never silently ignored', () => {
+      // cert/key/ca are validated as well-formed but never presented on the
+      // wire by fetch(); constructing successfully would misrepresent mTLS
+      // as active when no client certificate is ever sent.
+      expect(() => new Streamline(BOOTSTRAP, {
         httpEndpoint: HTTP_URL,
         tls: { cert: 'client.pem', key: 'client-key.pem', ca: 'ca.pem' },
-      });
-      expect(mtlsClient).toBeDefined();
+      })).toThrow(UnsupportedOperationError);
     });
 
     it('A03: SASL PLAIN — SASL config accepted', () => {
@@ -633,20 +580,20 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       expect(saslClient).toBeDefined();
     });
 
-    it('A04: SCRAM-SHA-256 — mechanism accepted', () => {
-      const scramClient = new Streamline(BOOTSTRAP, {
+    it('A04: SCRAM-SHA-256 — rejected because this HTTP transport cannot perform a real handshake', () => {
+      // Only PLAIN and OAUTHBEARER are genuinely implemented; SCRAM would
+      // otherwise be silently downgraded to plaintext HTTP Basic auth.
+      expect(() => new Streamline(BOOTSTRAP, {
         httpEndpoint: HTTP_URL,
         sasl: { mechanism: 'SCRAM-SHA-256', username: 'user', password: 'pass' },
-      });
-      expect(scramClient).toBeDefined();
+      })).toThrow(UnsupportedOperationError);
     });
 
-    it('A05: SCRAM-SHA-512 — mechanism accepted', () => {
-      const scramClient = new Streamline(BOOTSTRAP, {
+    it('A05: SCRAM-SHA-512 — rejected because this HTTP transport cannot perform a real handshake', () => {
+      expect(() => new Streamline(BOOTSTRAP, {
         httpEndpoint: HTTP_URL,
         sasl: { mechanism: 'SCRAM-SHA-512', username: 'user', password: 'pass' },
-      });
-      expect(scramClient).toBeDefined();
+      })).toThrow(UnsupportedOperationError);
     });
 
     it('A06: Auth Failure — invalid credentials produce error', async () => {
@@ -768,7 +715,7 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
       try {
         const messages = await badClient.consumeBatch(`nonexistent-${Date.now()}`, {
           maxMessages: 1,
-          maxWaitMs: 2_000,
+          pollTimeout: 2_000,
         });
         // Either throws or returns empty — both are acceptable
         expect(messages.length).toBe(0);
@@ -863,4 +810,3 @@ describe.skipIf(!serverAvailable)('Streamline Conformance Suite', () => {
     });
   });
 });
-

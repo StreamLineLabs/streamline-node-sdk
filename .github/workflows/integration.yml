@@ -9,6 +9,9 @@ on:
     - cron: '0 4 * * 1' # Weekly Monday 4am UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   integration:
     runs-on: ubuntu-latest
@@ -24,21 +27,33 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '22.22.0'
           cache: 'npm'
       - run: npm ci
+
+      # Fail-closed wait: the loop used to fall through silently when the
+      # server never became healthy.
       - name: Wait for Streamline
         run: |
           for i in $(seq 1 30); do
-            curl -sf http://localhost:9094/health && break
+            if curl -sf http://localhost:9094/health > /dev/null 2>&1; then
+              echo "Streamline is healthy"
+              exit 0
+            fi
             echo "Waiting for Streamline... ($i/30)"
             sleep 2
           done
-      - name: Run integration tests
-        run: npm run test:integration --if-present || npm test
+          echo "Streamline never became healthy"
+          exit 1
+
+      # The conformance suite is the integration suite; requiring the server
+      # means an unreachable fixture fails the job instead of skipping.
+      - name: Run conformance suite against the server
         env:
-          STREAMLINE_BOOTSTRAP_SERVERS: localhost:9092
-          STREAMLINE_HTTP_URL: http://localhost:9094
+          STREAMLINE_CONFORMANCE_REQUIRE: '1'
+          STREAMLINE_BOOTSTRAP: localhost:9092
+          STREAMLINE_HTTP: http://localhost:9094
+        run: npm run test:conformance
