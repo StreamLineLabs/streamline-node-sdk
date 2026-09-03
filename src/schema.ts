@@ -42,11 +42,11 @@ export class SchemaRegistry {
    */
   async register(subject: string, schema: string, type: SchemaType = 'JSON'): Promise<number> {
     const response = await fetch(
-      `${this.baseUrl}/api/schemas/subjects/${encodeURIComponent(subject)}/versions`,
+      `${this.baseUrl}/subjects/${encodeURIComponent(subject)}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schema, schema_type: type }),
+        body: JSON.stringify({ schema, schemaType: type }),
       }
     );
 
@@ -63,14 +63,22 @@ export class SchemaRegistry {
    * Get a schema by its global ID.
    */
   async getSchema(id: number): Promise<SchemaInfo> {
-    const response = await fetch(`${this.baseUrl}/api/schemas/ids/${id}`);
+    const response = await fetch(`${this.baseUrl}/schemas/ids/${id}`);
 
     if (!response.ok) {
       const error = await response.text();
       throw new StreamlineError(`Failed to get schema: ${error}`, 'SCHEMA_ERROR');
     }
 
-    return response.json() as Promise<SchemaInfo>;
+    const result = await response.json() as {
+      schema: string;
+      schemaType?: SchemaType;
+    };
+    return {
+      id,
+      schema: result.schema,
+      schemaType: result.schemaType ?? 'AVRO',
+    };
   }
 
   /**
@@ -78,7 +86,7 @@ export class SchemaRegistry {
    */
   async getVersions(subject: string): Promise<number[]> {
     const response = await fetch(
-      `${this.baseUrl}/api/schemas/subjects/${encodeURIComponent(subject)}/versions`
+      `${this.baseUrl}/subjects/${encodeURIComponent(subject)}/versions`
     );
 
     if (!response.ok) {
@@ -98,11 +106,11 @@ export class SchemaRegistry {
     type: SchemaType = 'JSON'
   ): Promise<boolean> {
     const response = await fetch(
-      `${this.baseUrl}/api/schemas/compatibility/subjects/${encodeURIComponent(subject)}/versions/latest`,
+      `${this.baseUrl}/compatibility/subjects/${encodeURIComponent(subject)}/versions/latest`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schema, schema_type: type }),
+        body: JSON.stringify({ schema, schemaType: type }),
       }
     );
 

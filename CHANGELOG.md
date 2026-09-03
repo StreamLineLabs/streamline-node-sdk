@@ -61,6 +61,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`StreamlineVerifier` did not actually bind the attestation to the message
+  being verified.** `verify()` accepted the envelope's own self-reported
+  `payload_sha256`, `topic`, `partition`, and `offset` at face value instead of
+  checking them against the message actually being verified, and trusted
+  whatever `key_id` the envelope claimed — so a header captured from one valid
+  record could be replayed onto any other message (different content,
+  different topic/partition/offset, or under a different key_id) and still
+  report `verified: true`. `verify()` now recomputes the payload hash from
+  `Message.rawValue`, compares the envelope's topic/partition/offset against
+  the message's actual values, and only checks the signature against a public
+  key registered for the envelope's claimed `key_id`; the constructor now
+  requires binding a `keyId` to a single key, or a map of trusted `key_id ->
+  publicKey` pairs. `Message.rawValue` is a new field, populated by
+  `Streamline.consume()`/`consumeBatch()` with the exact wire bytes (not a
+  reserialized copy of the parsed `value`) so the hash check is exact;
+  verification fails closed when it is absent.
 - **`Consumer` silently read only partition 0.** `poll()` and `messages()`
   always fetched partition `0` regardless of how many partitions the topic
   actually had, so records on every other partition were silently never
@@ -92,6 +108,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resurrect `connected` or interfere with the current abort controller. An
   explicit manual reopen (`close()` then `connect()`) is unaffected — it starts
   its own new, current generation and connects normally.
+- **`TopicInfo.sizeBytes`/`config`, `ConsumerGroupInfo.protocol`/`members`, and
+  `ClusterInfo.clusterId`/`controller`/`brokers` were silently removed** when
+  these interfaces were narrowed to the fields Streamline 0.3 actually reports
+  (see "Core GraphQL documents..." below), breaking source compatibility for
+  code written against earlier SDK releases. They are restored as required,
+  deprecated compatibility fields populated with explicit neutral sentinels
+  (`0`, `""`, `-1`, `{}`, or `[]`, depending on the field), since Streamline
+  0.3 cannot supply authoritative values. This preserves the old source shape
+  without fabricating topology, size, configuration, or member data. Fields
+  introduced by the newer HTTP metadata shape remain optional, so object
+  literals using the exact earlier `TopicInfo`, `ConsumerGroupInfo`, and
+  `ClusterInfo` shapes still compile.
+- Core GraphQL documents now match the pinned Streamline 0.3 schema:
+  `produceMessage`/`ProduceInput`, selected `createTopic` results, actual topic
+  fields, `consumerGroups`, and `clusterInfo`. `produceBatch()` is implemented
+  as ordered single-message mutations because the server has no batch mutation.
 - **`Consumer.pause()` discarded fetched records.** The message iterator dropped
   every record polled while paused. Records are now held until the partition is
   resumed, `pause()`/`resume()` honour a partition list, and `poll()` buffers
