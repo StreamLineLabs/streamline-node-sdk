@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Producer } from '../producer';
 import { Streamline } from '../client';
-import { StreamlineError } from '../types';
+import { StreamlineError, UnsupportedOperationError } from '../types';
 
 describe('Producer', () => {
   let mockClient: Streamline;
@@ -20,12 +20,32 @@ describe('Producer', () => {
       const producer = new Producer(mockClient, 'test-topic', {
         batchSize: 500,
         lingerMs: 50,
-        compression: 'zstd',
+        compression: 'none',
         retries: 5,
         retryBackoffMs: 200,
-        idempotent: true,
       });
       expect(producer).toBeDefined();
+    });
+
+    it('rejects idempotent: true instead of silently ignoring it', () => {
+      expect(
+        () => new Producer(mockClient, 'test-topic', { idempotent: true }),
+      ).toThrow(UnsupportedOperationError);
+      expect(
+        () => new Producer(mockClient, 'test-topic', { idempotent: true }),
+      ).toThrow(/no producer id or sequence number/);
+    });
+
+    it('accepts an explicit idempotent: false', () => {
+      expect(
+        () => new Producer(mockClient, 'test-topic', { idempotent: false }),
+      ).not.toThrow();
+    });
+
+    it('rejects unsupported HTTP batch compression', () => {
+      expect(
+        () => new Producer(mockClient, 'test-topic', { compression: 'zstd' }),
+      ).toThrow(UnsupportedOperationError);
     });
 
     it('applies default values for omitted config', () => {
@@ -74,6 +94,95 @@ describe('Producer', () => {
       await producer.close();
       await expect(producer.close()).resolves.toBeUndefined();
     });
+
+    it('waits for an active flush and drains records queued behind it', async () => {
+      let releaseFirst: ((results: {
+        topic: string;
+        partition: number;
+        offset: number;
+        timestamp: number;
+      }[]) => void) | undefined;
+      const firstResult = new Promise<{
+        topic: string;
+        partition: number;
+        offset: number;
+        timestamp: number;
+      }[]>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const produceBatch = vi
+        .spyOn(mockClient, 'produceBatch')
+        .mockImplementationOnce(() => firstResult)
+        .mockResolvedValueOnce([
+          { topic: 'test-topic', partition: 0, offset: 1, timestamp: Date.now() },
+        ]);
+
+      const producer = new Producer(mockClient, 'test-topic', { batchSize: 1 });
+      await producer.start();
+      const first = producer.send({ value: 'first' });
+      await vi.waitFor(() => expect(produceBatch).toHaveBeenCalledTimes(1));
+      const second = producer.send({ value: 'second' });
+
+      const closing = producer.close();
+      releaseFirst?.([
+        { topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now() },
+      ]);
+
+      await expect(closing).resolves.toBeUndefined();
+      await expect(first).resolves.toMatchObject({ offset: 0 });
+      await expect(second).resolves.toMatchObject({ offset: 1 });
+      expect(produceBatch).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects close and buffered sends when a transaction is still open', async () => {
+      const producer = new Producer(mockClient, 'test-topic');
+      await producer.start();
+      await producer.beginTransaction();
+      const pending = producer.send({ value: 'buffered' });
+      const pendingRejection = expect(pending).rejects.toThrow(/transaction in progress/);
+
+      await expect(producer.close()).rejects.toMatchObject({
+        code: 'TRANSACTION_ABORTED',
+      });
+      await pendingRejection;
+    });
+
+    it('waits for an in-flight transaction commit instead of aborting written records', async () => {
+      let releaseCommit: ((results: {
+        topic: string;
+        partition: number;
+        offset: number;
+        timestamp: number;
+      }[]) => void) | undefined;
+      const commitResult = new Promise<{
+        topic: string;
+        partition: number;
+        offset: number;
+        timestamp: number;
+      }[]>((resolve) => {
+        releaseCommit = resolve;
+      });
+      const produceBatch = vi.spyOn(mockClient, 'produceBatch').mockReturnValue(commitResult);
+
+      const producer = new Producer(mockClient, 'test-topic');
+      await producer.start();
+      await producer.beginTransaction();
+      const pending = producer.send({ value: 'transactional' });
+      const committing = producer.commitTransaction();
+      await vi.waitFor(() => expect(produceBatch).toHaveBeenCalledTimes(1));
+
+      const closing = producer.close();
+      await expect(producer.send({ value: 'late' })).rejects.toMatchObject({
+        code: 'PRODUCER_CLOSED',
+      });
+      releaseCommit?.([
+        { topic: 'test-topic', partition: 0, offset: 4, timestamp: Date.now() },
+      ]);
+
+      await expect(committing).resolves.toHaveLength(1);
+      await expect(pending).resolves.toMatchObject({ offset: 4 });
+      await expect(closing).resolves.toBeUndefined();
+    });
   });
 
   describe('flush', () => {
@@ -82,12 +191,28 @@ describe('Producer', () => {
       await producer.start();
       await expect(producer.flush()).resolves.toBeUndefined();
     });
+
+    it('propagates delivery failures while rejecting affected sends', async () => {
+      vi.spyOn(mockClient, 'produceBatch').mockRejectedValue(
+        new StreamlineError('write failed', 'WRITE_FAILED', false),
+      );
+      const producer = new Producer(mockClient, 'test-topic', {
+        batchSize: 10,
+        lingerMs: 10_000,
+      });
+      await producer.start();
+      const pending = producer.send({ value: 'x' });
+      const pendingRejection = expect(pending).rejects.toThrow(/write failed/);
+
+      await expect(producer.flush()).rejects.toThrow(/write failed/);
+      await pendingRejection;
+    });
   });
 
   describe('batching', () => {
     it('accumulates messages until batch size', async () => {
       const produceBatchSpy = vi.spyOn(mockClient, 'produceBatch')
-        .mockResolvedValue([{ topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now().toString() }]);
+        .mockResolvedValue([{ topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now() }]);
 
       const producer = new Producer(mockClient, 'test-topic', {
         batchSize: 3,
@@ -111,7 +236,7 @@ describe('Producer', () => {
 
     it('flushes on linger timeout', async () => {
       const produceBatchSpy = vi.spyOn(mockClient, 'produceBatch')
-        .mockResolvedValue([{ topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now().toString() }]);
+        .mockResolvedValue([{ topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now() }]);
 
       const producer = new Producer(mockClient, 'test-topic', {
         batchSize: 1000, // high batch size
@@ -131,13 +256,13 @@ describe('Producer', () => {
       produceBatchSpy.mockRestore();
     });
 
-    it('passes compression to produceBatch', async () => {
+    it('passes the supported none compression mode to produceBatch', async () => {
       const produceBatchSpy = vi.spyOn(mockClient, 'produceBatch')
-        .mockResolvedValue([{ topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now().toString() }]);
+        .mockResolvedValue([{ topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now() }]);
 
       const producer = new Producer(mockClient, 'test-topic', {
         batchSize: 1,
-        compression: 'zstd',
+        compression: 'none',
       });
       await producer.start();
 
@@ -147,7 +272,7 @@ describe('Producer', () => {
       expect(produceBatchSpy).toHaveBeenCalledWith(
         'test-topic',
         expect.any(Array),
-        { compression: 'zstd' }
+        { compression: 'none' }
       );
 
       produceBatchSpy.mockRestore();
@@ -162,7 +287,7 @@ describe('Producer', () => {
         if (callCount < 3) {
           throw new StreamlineError('transient', 'CONN', true);
         }
-        return [{ topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now().toString() }];
+        return [{ topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now() }];
       });
 
       const producer = new Producer(mockClient, 'test-topic', {
@@ -215,8 +340,8 @@ describe('Producer', () => {
     it('sends multiple messages', async () => {
       vi.spyOn(mockClient, 'produceBatch')
         .mockResolvedValue([
-          { topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now().toString() },
-          { topic: 'test-topic', partition: 0, offset: 1, timestamp: Date.now().toString() },
+          { topic: 'test-topic', partition: 0, offset: 0, timestamp: Date.now() },
+          { topic: 'test-topic', partition: 0, offset: 1, timestamp: Date.now() },
         ]);
 
       const producer = new Producer(mockClient, 'test-topic', { batchSize: 10 });

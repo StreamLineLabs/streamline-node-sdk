@@ -8,7 +8,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- APIs the HTTP/GraphQL transport cannot honour now fail loudly instead of
+  silently doing nothing. All of them throw the new `UnsupportedOperationError`
+  (code `UNSUPPORTED_OPERATION`, exported from the package root):
+  - `Consumer.onRebalance()` — the client never joins the Kafka group protocol,
+    so a registered handler could never fire.
+  - `Consumer.seek()`, `seekToBeginning()` and `seekToEnd()` — Streamline 0.3
+    exposes no HTTP consumer-offset reset operation.
+  - `ConsumeOptions.group` and group-backed `Consumer.poll()`/`messages()` —
+    Streamline 0.3's GraphQL messages query has no group argument, so these are
+    rejected instead of silently consuming without group semantics.
+  - `ConsumerConfig.sessionTimeoutMs`, `ConsumerConfig.heartbeatIntervalMs` and
+    `autoOffsetReset: 'none'` — rejected at construction time.
+  - `ConsumerConfig.autoCommit: true` and `autoCommitIntervalMs` — rejected
+    because the HTTP API cannot commit group offsets. `autoCommit` now defaults
+    to `false`.
+  - `ProducerConfig.idempotent: true` — the HTTP produce API carries no producer
+    id or sequence number, so duplicate suppression is impossible. The default is
+    now `false` (previously `true`, which claimed a guarantee that never existed);
+    delivery is at-least-once.
+  - `ProducerConfig.compression` values other than `none`, plus unsupported
+    topic configuration and admin operations (`alterTopicConfig`,
+    `createPartitions`, `deleteConsumerGroup`, `describeBrokerConfig`), now fail
+    explicitly instead of accepting values the server ignores.
+  - `auth.mechanism`/`sasl.mechanism` `'SCRAM-SHA-256'`/`'SCRAM-SHA-512'` —
+    rejected at `Streamline` construction time. This HTTP/GraphQL transport
+    sends one auth header per request and cannot perform a real SCRAM
+    challenge-response handshake; accepting the mechanism previously downgraded
+    silently to plaintext HTTP Basic auth, identical to `PLAIN`. Use `PLAIN`
+    over an `https://` endpoint, `OAUTHBEARER`, or the Kafka protocol.
+  - `TlsConfig`/legacy `tls` customization (`ca`, `cert`, `key`, `passphrase`,
+    `servername`, `rejectUnauthorized: false`) — rejected at construction time.
+    None of these were ever applied to the `fetch()` calls this transport
+    makes, so accepting them silently misrepresented custom CA pinning, mTLS,
+    and relaxed certificate verification as active. A bare `{ enabled: true }`
+    (or the legacy `tls: true` boolean) is unaffected. Use an `https://`
+    `httpEndpoint` for transport encryption, or build your own `fetch`
+    dispatcher from `tlsConfig` via `createTlsOptions()`.
+  - `Consumer` on a topic with more than one partition, when no `partition` is
+    given — rejected on the first `poll()`/iteration instead of silently
+    reading only partition `0` forever and dropping every record on every
+    other partition. `ConsumerConfig.partition` selects a single partition
+    explicitly; single-partition topics are unaffected.
+- `Consumer.commit()` now propagates broker failures instead of swallowing them,
+  only records an offset after broker acceptance, and serializes overlapping
+  commits so an older request cannot overwrite a newer offset. Against
+  Streamline 0.3 it fails explicitly because no HTTP commit mutation exists.
+- `new Streamline('')` now throws a `CONFIG_ERROR` `StreamlineError` instead of
+  silently constructing a client with no bootstrap address.
+
 ### Fixed
+
+- **`Consumer` silently read only partition 0.** `poll()` and `messages()`
+  always fetched partition `0` regardless of how many partitions the topic
+  actually had, so records on every other partition were silently never
+  delivered. The consumer now resolves a partition on first use — an explicit
+  `ConsumerConfig.partition`, or discovery via `topicInfo()` that accepts a
+  single-partition topic and rejects (see Breaking) a multi-partition one.
+  Failed topic discovery now throws `TopicNotFoundError` instead of guessing
+  that the missing metadata meant partition `0`.
+- **An explicit `Streamline.close()` did not cancel an in-progress
+  auto-reconnect.** `consume()`'s `pollTimeout` idle wait and the exponential
+  backoff inside the internal reconnect loop used a plain, uncancellable
+  `setTimeout`, and the loop never checked whether the client had since been
+  closed — so closing a client mid-reconnect let it keep sleeping out its full
+  backoff and calling `connect()` again (even reviving `connected: true`) after
+  the caller asked it to stop. `close()`'s abort now wakes both waits
+  immediately, and the reconnect loop checks a dedicated `closed` flag before
+  starting, after each backoff sleep, and before each retry, throwing a
+  `ConnectionError` instead of reconnecting once closed.
+- **A health check already in flight when `close()` ran could still revive
+  `connected: true` after the close.** The `closed`/backoff checks above cover
+  the reconnect loop's sleeps, but not a `connect()` call's own in-flight
+  `/health` request: if it settled successfully after an explicit `close()` (or
+  after a newer `connect()`/`reconnect()` attempt had already superseded it),
+  it still unconditionally set `connected = true`. `Streamline` now tracks a
+  monotonic lifecycle `generation`, bumped by every `connect()` and `close()`;
+  a `connect()` attempt (direct or `reconnect()`-driven) captures its
+  generation up front and discards its result quietly if that generation is no
+  longer current by the time the health check settles, so it can no longer
+  resurrect `connected` or interfere with the current abort controller. An
+  explicit manual reopen (`close()` then `connect()`) is unaffected — it starts
+  its own new, current generation and connects normally.
+- **`Consumer.pause()` discarded fetched records.** The message iterator dropped
+  every record polled while paused. Records are now held until the partition is
+  resumed, `pause()`/`resume()` honour a partition list, and `poll()` buffers
+  records for paused partitions instead of dropping or refetching them.
+  `Consumer.isPaused(partition?)` exposes the state.
+- `Streamline.consumeBatch()` accepted `group` and `pollTimeout` and ignored
+  both. `group` is now rejected explicitly; `pollTimeout` bounds the entire
+  request, including OAuth token acquisition, and raises `TimeoutError`.
+  `StreamlineOptions.timeout` is now the default deadline for all requests.
+- `Admin.createBranch()`, `Admin.listBranches()` and `Admin.discardBranch()`
+  called `fetch` directly, bypassing authentication headers, the client id, the
+  abort signal and the circuit breaker. They now route through
+  `Streamline.request()` like every other call.
+
+### Added
+
+- `UnsupportedOperationError`, `Consumer.isPaused()`, and
+  `Streamline.bootstrapServers`.
+
+### Fixed (previously released work)
 - `npm run build` no longer fails resolving the optional native addon. The
   embedded-mode binding (`native/streamline.node`) and the optional
   `@opentelemetry/api` peer are now loaded at runtime via `createRequire`, so

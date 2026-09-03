@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Streamline } from '../client';
 import { Consumer } from '../consumer';
 import { Producer } from '../producer';
-import { StreamlineError } from '../types';
+import { StreamlineError, UnsupportedOperationError } from '../types';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -29,20 +29,21 @@ describe('Promise contract of synchronous public methods', () => {
     await expect(result).resolves.toBeUndefined();
   });
 
-  it('Consumer.start()/seek()/seekToEnd() return promises', async () => {
+  it('Consumer.start() returns a promise and seeks reject explicitly', async () => {
     const consumer = new Consumer(new Streamline('localhost:9092'), 'topic', 'group');
     expect(consumer.start()).toBeInstanceOf(Promise);
-    expect(consumer.seek(0, 5)).toBeInstanceOf(Promise);
-    expect(consumer.seekToEnd()).toBeInstanceOf(Promise);
+    const seek = consumer.seek(0, 5);
+    expect(seek).toBeInstanceOf(Promise);
+    await expect(seek).rejects.toBeInstanceOf(UnsupportedOperationError);
     await consumer.close();
   });
 
-  it('Consumer.seek() then position() reports the next offset', async () => {
-    const consumer = new Consumer(new Streamline('localhost:9092'), 'topic');
-    await consumer.seek(3, 41);
-    expect(consumer.position(3)).toBe(42);
-    await consumer.seekToEnd([3]);
-    expect(consumer.position(3)).toBeUndefined();
+  it('Consumer.seekToEnd() rejects rather than resolving without effect', async () => {
+    const client = new Streamline('localhost:9092');
+    const consumer = new Consumer(client, 'topic');
+    const result = consumer.seekToEnd();
+    expect(result).toBeInstanceOf(Promise);
+    await expect(result).rejects.toBeInstanceOf(UnsupportedOperationError);
   });
 
   it('Producer.start() returns a promise', async () => {

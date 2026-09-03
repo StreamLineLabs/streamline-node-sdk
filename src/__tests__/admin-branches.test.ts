@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { Admin } from '../admin';
 import { Streamline } from '../client';
-import { StreamlineError } from '../types';
+import { StreamlineError, ConnectionError } from '../types';
 
 const realFetch = globalThis.fetch;
 
-function stubFetch(status: number, body: unknown): ReturnType<typeof vi.fn> {
-  const impl = vi.fn(
-    () =>
+type FetchMock = Mock<Parameters<typeof fetch>, Promise<Response>>;
+
+function stubFetch(status: number, body: unknown): FetchMock {
+  const impl: FetchMock = vi.fn(
+    (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
       Promise.resolve(
         new Response(typeof body === 'string' ? body : JSON.stringify(body), {
           status,
@@ -17,6 +20,10 @@ function stubFetch(status: number, body: unknown): ReturnType<typeof vi.fn> {
   );
   globalThis.fetch = impl as unknown as typeof fetch;
   return impl;
+}
+
+function initOf(impl: FetchMock, call = 0): RequestInit {
+  return impl.mock.calls[call][1] ?? {};
 }
 
 function newAdmin(httpEndpoint = 'http://broker:9094'): Admin {
@@ -90,14 +97,14 @@ describe('Admin branch HTTP mapping', () => {
     it('sends base_offsets only when provided', async () => {
       const impl = stubFetch(200, {});
       await newAdmin().createBranch('exp-d', 'orders');
-      expect(JSON.parse(String(impl.mock.calls[0][1].body))).toEqual({
+      expect(JSON.parse(String(initOf(impl).body))).toEqual({
         name: 'exp-d',
         base_topic: 'orders',
       });
 
       const withOffsets = stubFetch(200, {});
       await newAdmin().createBranch('exp-e', 'orders', { 0: 10 });
-      expect(JSON.parse(String(withOffsets.mock.calls[0][1].body))).toEqual({
+      expect(JSON.parse(String(initOf(withOffsets).body))).toEqual({
         name: 'exp-e',
         base_topic: 'orders',
         base_offsets: { 0: 10 },
@@ -164,7 +171,8 @@ describe('Admin branch HTTP mapping', () => {
       expect(String(impl.mock.calls[0][0])).toBe(
         'http://broker:9094/api/v1/branches/orders%2Fexp%20a',
       );
-      expect(impl.mock.calls[0][1]).toEqual({ method: 'DELETE' });
+      const init = impl.mock.calls[0][1] as RequestInit;
+      expect(init.method).toBe('DELETE');
     });
 
     it('throws StreamlineError on a non-2xx response', async () => {
@@ -172,6 +180,52 @@ describe('Admin branch HTTP mapping', () => {
       await expect(newAdmin().discardBranch('missing')).rejects.toThrow(
         /Failed to discard branch: HTTP 404/,
       );
+    });
+  });
+
+  describe('authenticated routing', () => {
+    function authedAdmin(): Admin {
+      return new Admin(
+        new Streamline('localhost:9092', {
+          httpEndpoint: 'http://broker:9094',
+          clientId: 'branch-tester',
+          sasl: { mechanism: 'PLAIN', username: 'user', password: 'pass' },
+        }),
+      );
+    }
+
+    function headersOf(impl: FetchMock, call = 0): Record<string, string> {
+      return (initOf(impl, call).headers ?? {}) as Record<string, string>;
+    }
+
+    it('sends credentials and client id when listing branches', async () => {
+      const impl = stubFetch(200, []);
+      await authedAdmin().listBranches();
+      const headers = headersOf(impl);
+      expect(headers['X-Sasl-Mechanism']).toBe('PLAIN');
+      expect(headers['Authorization']).toBe(
+        `Basic ${Buffer.from('user:pass').toString('base64')}`,
+      );
+      expect(headers['X-Client-Id']).toBe('branch-tester');
+    });
+
+    it('sends credentials when creating a branch', async () => {
+      const impl = stubFetch(200, {});
+      await authedAdmin().createBranch('exp', 'orders');
+      const headers = headersOf(impl);
+      expect(headers['X-Sasl-Mechanism']).toBe('PLAIN');
+      expect(headers['Content-Type']).toBe('application/json');
+    });
+
+    it('sends credentials when discarding a branch', async () => {
+      const impl = stubFetch(200, '');
+      await authedAdmin().discardBranch('exp');
+      expect(headersOf(impl)['X-Client-Id']).toBe('branch-tester');
+    });
+
+    it('surfaces transport failures as ConnectionError', async () => {
+      globalThis.fetch = vi.fn(() => Promise.reject(new Error('socket hang up'))) as unknown as typeof fetch;
+      await expect(authedAdmin().listBranches()).rejects.toThrow(ConnectionError);
     });
   });
 });

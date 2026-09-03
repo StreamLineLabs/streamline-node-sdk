@@ -5,6 +5,7 @@ import {
   AuthenticationError,
   TopicNotFoundError,
   TimeoutError,
+  UnsupportedOperationError,
 } from '../types';
 
 describe('StreamlineError', () => {
@@ -70,5 +71,27 @@ describe('TimeoutError', () => {
     expect(err.name).toBe('TimeoutError');
     expect(err.code).toBe('TIMEOUT');
     expect(err.retryable).toBe(true);
+  });
+});
+
+describe('UnsupportedOperationError', () => {
+  it('names the operation and is not retryable', () => {
+    const err = new UnsupportedOperationError(
+      'Consumer.onRebalance',
+      'no group protocol',
+      'Track assignment() instead',
+    );
+    expect(err.name).toBe('UnsupportedOperationError');
+    expect(err.code).toBe('UNSUPPORTED_OPERATION');
+    expect(err.operation).toBe('Consumer.onRebalance');
+    expect(err.retryable).toBe(false);
+    expect(err).toBeInstanceOf(StreamlineError);
+  });
+
+  it('includes the reason and the hint in the message', () => {
+    const err = new UnsupportedOperationError('X.y', 'because', 'do z');
+    expect(err.message).toContain('X.y is not supported by this client: because');
+    expect(err.message).toContain('do z');
+    expect(err.hint).toBe('do z');
   });
 });

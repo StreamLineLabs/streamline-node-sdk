@@ -37,7 +37,12 @@ export interface TopicConfig {
   partitions?: number;
   /** Replication factor */
   replicationFactor?: number;
-  /** Additional configuration */
+  /**
+   * Additional configuration.
+   *
+   * @deprecated Streamline 0.3 accepts but does not persist these values, so a
+   * non-empty object throws `UnsupportedOperationError`.
+   */
   config?: Record<string, string>;
 }
 
@@ -56,7 +61,7 @@ export interface TopicConfig {
  *
  * // Describe topic
  * const info = await admin.describeTopic('events');
- * console.log(`Partitions: ${info?.partitionCount}`);
+ * console.log(`Partitions: ${info?.partitions}`);
  *
  * // Delete topic
  * await admin.deleteTopic('events');
@@ -72,10 +77,6 @@ export class Admin {
    */
   constructor(client: Streamline) {
     this.client = client;
-  }
-
-  private get httpUrl(): string {
-    return this.client.httpEndpoint;
   }
 
   // =========================================================================
@@ -131,6 +132,8 @@ export class Admin {
    *
    * @param name - Topic name
    * @param config - Configuration changes
+   * @throws {UnsupportedOperationError} Streamline 0.3 exposes no alter
+   *   configuration mutation.
    */
   async alterTopicConfig(name: string, config: Record<string, string>): Promise<void> {
     await this.client.alterTopicConfig(name, config);
@@ -141,6 +144,8 @@ export class Admin {
    *
    * @param name - Topic name
    * @param newTotal - New total number of partitions
+   * @throws {UnsupportedOperationError} Streamline 0.3 exposes no partition
+   *   expansion mutation.
    */
   async createPartitions(name: string, newTotal: number): Promise<void> {
     await this.client.createPartitions(name, newTotal);
@@ -173,6 +178,8 @@ export class Admin {
    * Delete a consumer group.
    *
    * @param groupId - Consumer group ID
+   * @throws {UnsupportedOperationError} Streamline 0.3 exposes no group
+   *   deletion mutation.
    */
   async deleteConsumerGroup(groupId: string): Promise<void> {
     await this.client.deleteConsumerGroup(groupId);
@@ -184,6 +191,8 @@ export class Admin {
    * @param groupId - Consumer group ID
    * @param topic - Topic name
    * @param options - Reset options
+   * @throws {UnsupportedOperationError} Streamline 0.3 exposes no HTTP offset
+   *   reset operation.
    */
   async resetConsumerGroupOffsets(
     groupId: string,
@@ -217,6 +226,8 @@ export class Admin {
    *
    * @param brokerId - Broker ID
    * @returns Broker configuration
+   * @throws {UnsupportedOperationError} Streamline 0.3 exposes no broker
+   *   configuration query.
    */
   async describeBrokerConfig(brokerId: number): Promise<Record<string, string>> {
     return this.client.describeBrokerConfig(brokerId);
@@ -228,6 +239,9 @@ export class Admin {
 
   /**
    * Create a copy-on-write branch of a topic.
+   *
+   * Sent through the client's authenticated request path, so SASL/API-key
+   * headers, the client id, the abort signal and the circuit breaker all apply.
    *
    * @param name - Branch name
    * @param baseTopic - Topic to branch from
@@ -243,7 +257,7 @@ export class Admin {
     if (baseOffsets) {
       body['base_offsets'] = baseOffsets;
     }
-    const resp = await fetch(`${this.httpUrl}/api/v1/branches`, {
+    const resp = await this.client.request('/api/v1/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -268,7 +282,7 @@ export class Admin {
     if (topic) {
       path += `?topic=${encodeURIComponent(topic)}`;
     }
-    const resp = await fetch(`${this.httpUrl}${path}`);
+    const resp = await this.client.request(path);
     if (!resp.ok) {
       const text = await resp.text();
       throw new StreamlineError(`Failed to list branches: HTTP ${resp.status}: ${text}`);
@@ -284,8 +298,8 @@ export class Admin {
    * @param branchId - Branch identifier
    */
   async discardBranch(branchId: string): Promise<void> {
-    const resp = await fetch(
-      `${this.httpUrl}/api/v1/branches/${encodeURIComponent(branchId)}`,
+    const resp = await this.client.request(
+      `/api/v1/branches/${encodeURIComponent(branchId)}`,
       { method: 'DELETE' },
     );
     if (!resp.ok) {
