@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import type { Mock } from 'vitest';
 import {
   AvroSchemaSerializer,
   JsonSchemaSerializer,
@@ -13,9 +14,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function stubFetch(status: number, body: unknown): ReturnType<typeof vi.fn> {
-  const impl = vi.fn(
-    () =>
+function stubFetch(status: number, body: unknown): Mock<Parameters<typeof fetch>, Promise<Response>> {
+  const impl: Mock<Parameters<typeof fetch>, Promise<Response>> = vi.fn(
+    (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
       Promise.resolve(
         new Response(typeof body === 'string' ? body : JSON.stringify(body), { status }),
       ),
@@ -121,7 +122,7 @@ describe('serialize wire format', () => {
     await serializer.serialize('users', { id: 1 });
     await serializer.serialize('users', { id: 2 });
     expect(impl).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(impl.mock.calls[0][1].body)).schemaType).toBe('AVRO');
+    expect(JSON.parse(String((impl.mock.calls[0][1] ?? {}).body)).schemaType).toBe('AVRO');
   });
 });
 

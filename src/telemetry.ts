@@ -13,7 +13,7 @@
  *
  * @example
  * ```typescript
- * import { StreamlineTracing } from 'streamline';
+ * import { StreamlineTracing } from '@streamlinelabs/sdk';
  *
  * const tracing = new StreamlineTracing();
  *

@@ -9,11 +9,11 @@
  *   npx tsx examples/circuit-breaker.ts
  */
 
-import { Streamline, CircuitBreaker, CircuitState } from 'streamline';
-import { StreamlineError } from 'streamline';
+import { Streamline, CircuitBreaker, CircuitState } from '@streamlinelabs/sdk';
+import { StreamlineError } from '@streamlinelabs/sdk';
 
 async function main() {
-  const client = new Streamline(process.env.STREAMLINE_BOOTSTRAP_SERVERS || 'localhost:9092', {
+  const client = new Streamline(process.env['STREAMLINE_BOOTSTRAP_SERVERS'] || 'localhost:9092', {
     httpEndpoint: 'http://localhost:9094',
   });
 

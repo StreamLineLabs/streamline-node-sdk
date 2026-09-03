@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { AIClient, toAnomalyAlert } from '../ai';
 import { StreamlineError } from '../types';
 
@@ -26,8 +27,11 @@ function sseResponse(text: string, chunkSize = 7): Response {
   return new Response(body, { status: 200 });
 }
 
-function stubFetch(response: Response | (() => Response)): ReturnType<typeof vi.fn> {
-  const impl = vi.fn(() => Promise.resolve(typeof response === 'function' ? response() : response));
+function stubFetch(response: Response | (() => Response)): Mock<Parameters<typeof fetch>, Promise<Response>> {
+  const impl: Mock<Parameters<typeof fetch>, Promise<Response>> = vi.fn(
+    (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+      Promise.resolve(typeof response === 'function' ? response() : response),
+  );
   globalThis.fetch = impl as unknown as typeof fetch;
   return impl;
 }
@@ -142,7 +146,7 @@ describe('AIClient', () => {
       await collect(
         new AIClient('http://ai:9094').detectAnomalies('m', { threshold: 4, windowSize: 50 }),
       );
-      expect(JSON.parse(String(impl.mock.calls[0][1].body))).toEqual({
+      expect(JSON.parse(String((impl.mock.calls[0][1] ?? {}).body))).toEqual({
         topic: 'm',
         config: { threshold: 4, window_size: 50 },
       });
@@ -151,7 +155,7 @@ describe('AIClient', () => {
     it('defaults threshold to 2.0 and window size to 100', async () => {
       const impl = stubFetch(() => sseResponse(''));
       await collect(new AIClient('http://ai:9094').detectAnomalies('m'));
-      expect(JSON.parse(String(impl.mock.calls[0][1].body))).toEqual({
+      expect(JSON.parse(String((impl.mock.calls[0][1] ?? {}).body))).toEqual({
         topic: 'm',
         config: { threshold: 2.0, window_size: 100 },
       });

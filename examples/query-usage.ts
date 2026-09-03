@@ -6,7 +6,7 @@
  *
  * Prerequisites:
  *   - Streamline server running
- *   - npm install streamline-client
+ *   - Build and install `@streamlinelabs/sdk` from this repository
  *
  * Run:
  *   npx tsx examples/query-usage.ts
@@ -14,8 +14,8 @@
 import { Streamline } from '../src';
 
 async function main() {
-  const bootstrap = process.env.STREAMLINE_BOOTSTRAP ?? 'localhost:9092';
-  const httpUrl = process.env.STREAMLINE_HTTP ?? 'http://localhost:9094';
+  const bootstrap = process.env['STREAMLINE_BOOTSTRAP'] ?? 'localhost:9092';
+  const httpUrl = process.env['STREAMLINE_HTTP'] ?? 'http://localhost:9094';
 
   const client = new Streamline(bootstrap, { httpEndpoint: httpUrl });
   await client.connect();

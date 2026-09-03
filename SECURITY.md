@@ -30,5 +30,5 @@ We follow responsible disclosure practices and will credit reporters (with permi
 
 ## Security Best Practices
 
-For production deployments, please review the [Streamline Security Documentation](https://github.com/streamlinelabs/streamline-docs).
-
+For production deployments, review the core server's
+[security policy](https://github.com/streamlinelabs/streamline/blob/main/SECURITY.md).

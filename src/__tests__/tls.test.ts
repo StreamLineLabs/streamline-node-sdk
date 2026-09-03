@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createTlsOptions, loadCertificateFromFile, type TlsConfig } from '../tls';
 import { StreamlineError } from '../types';
 import * as fs from 'node:fs/promises';

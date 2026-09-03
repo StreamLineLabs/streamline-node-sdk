@@ -6,7 +6,7 @@
  *
  * @example
  * ```ts
- * import { BranchAdminClient } from 'streamline';
+ * import { BranchAdminClient } from '@streamlinelabs/sdk';
  *
  * const client = new BranchAdminClient({ httpUrl: 'http://localhost:9094' });
  * await client.create('orders', 'exp-a');

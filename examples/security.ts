@@ -9,10 +9,10 @@
  *   npx tsx examples/security.ts
  */
 
-import { Streamline } from 'streamline';
+import { Streamline } from '@streamlinelabs/sdk';
 
 async function main() {
-  const servers = process.env.STREAMLINE_BOOTSTRAP_SERVERS || 'localhost:9092';
+  const servers = process.env['STREAMLINE_BOOTSTRAP_SERVERS'] || 'localhost:9092';
 
   // =========================================================================
   // Example 1: TLS only (server certificate validation)

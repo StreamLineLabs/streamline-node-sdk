@@ -1,5 +1,5 @@
 Streamline Node.js SDK
-Copyright 2024-2025 Jose David Baena
+Copyright 2024-2026 Jose David Baena
 
 This product includes software developed at:
 https://github.com/streamlinelabs/streamline-node-sdk
@@ -8,9 +8,16 @@ Licensed under the Apache License, Version 2.0.
 
 ================================================================================
 
-This product includes or depends on third-party software:
+This product has no required runtime dependencies. It talks to Streamline over
+the broker's HTTP/GraphQL API using the Node.js built-in `fetch`.
 
-KafkaJS (MIT), OpenTelemetry JS (Apache-2.0)
+Optional peer dependency:
+
+OpenTelemetry API for JavaScript (Apache-2.0) — https://github.com/open-telemetry/opentelemetry-js
+
+Development and workspace dependencies (not shipped in the published tarball)
+include TypeScript, tsup, ESLint, Vitest, and — for the `@streamlinelabs/testcontainers`
+workspace — testcontainers-node (MIT).
 
 For a complete list of dependencies and their licenses, see the project's
-dependency manifest file.
+dependency manifest (package.json) and lockfile.

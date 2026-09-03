@@ -192,7 +192,7 @@ describe('internal/optional-module', () => {
       // manifest. This pins the anchoring: a wrongly-anchored base cannot
       // produce this result.
       const pkg = loadOptionalModule('../../package.json', __dirname);
-      expect(isRecord(pkg) && pkg['name']).toBe('streamline');
+      expect(isRecord(pkg) && pkg['name']).toBe('@streamlinelabs/sdk');
     });
 
     it('returns undefined when a relative specifier misses from the given base', () => {

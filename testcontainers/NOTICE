@@ -1,0 +1,17 @@
+Testcontainers module for the Streamline Node.js SDK
+Copyright 2024-2026 Jose David Baena
+
+This product includes software developed at:
+https://github.com/streamlinelabs/streamline-node-sdk
+
+Licensed under the Apache License, Version 2.0.
+
+================================================================================
+
+This product depends on third-party software:
+
+testcontainers (MIT) — https://github.com/testcontainers/testcontainers-node
+
+For a complete list of dependencies and their licenses, see this package's
+dependency manifest (package.json) and the resolved lockfile at the repository
+root.

@@ -148,11 +148,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   called `fetch` directly, bypassing authentication headers, the client id, the
   abort signal and the circuit breaker. They now route through
   `Streamline.request()` like every other call.
+- `@streamlinelabs/testcontainers` did not compile: `withEphemeral*()` called a
+  `withEnvironment()` method that did not exist, and `StartedStreamlineContainer`
+  declared `stop()` twice. Added the missing builder method, removed the
+  duplicate, and made the consumer-group JSON parsing type-safe.
 
 ### Added
 
 - `UnsupportedOperationError`, `Consumer.isPaused()`, and
   `Streamline.bootstrapServers`.
+- `@streamlinelabs/testcontainers` is now a real npm workspace: it builds, type-checks
+  and has unit tests (Docker-free, via a mocked `testcontainers` module), ships
+  `LICENSE` and `NOTICE`, and is exercised in CI. Its `testcontainers` dependency
+  was updated to `^12.1.0` to remove vulnerable `undici`/`dockerode` versions.
+  The workspace and repository validation now require Node.js 22.22+, while the
+  dependency-free core SDK continues to support Node.js 18+.
+- Validation plumbing: `npm run validate` (runtime dependency audit, lint,
+  source/test/example/workspace type-checks, unit tests, workspace tests, dual
+  build, CJS/ESM import smoke tests, `npm pack --dry-run` for both packages) and `npm run verify:tag`
+  (release tag must match `package.json` version). `prepublishOnly` runs the
+  full validation.
+- `tsconfig.test.json` and `tsconfig.examples.json` so tests and examples are
+  type-checked in CI; examples resolve `streamline` to `src/index.ts`.
+
+### Changed
+
+- `NOTICE` is now published in the npm tarball (with `LICENSE`), and no longer
+  claims a KafkaJS dependency — the SDK has no required runtime dependencies and
+  speaks HTTP/GraphQL.
+- Release workflow is fail-closed and ordered: verify tag ↔ version, run the full
+  validation, generate **and verify** the CycloneDX SBOM with a pinned generator
+  (`@cyclonedx/cyclonedx-npm@6.0.1`, no `|| true`), publish with
+  `--provenance` (`id-token: write`), and only then create the GitHub release.
+  All release/CI actions are pinned to commit SHAs.
+- CI no longer masks the example type-check with `|| echo`, and now runs the
+  workspace build/tests, smoke imports and packaging dry-runs.
+- Documentation corrected: transport (HTTP/GraphQL, not the Kafka wire
+  protocol), package identity (`streamline`, currently unpublished — install
+  from a repository build), Node.js floor (18+), server requirement (0.4.0+),
+  real configuration defaults, environment variables the SDK actually reads,
+  TLS options not being applied to HTTP requests, transactions being client-side
+  buffering, and the moonshot/examples snippets now use real APIs
+  (`SemanticSearchClient`, `MemoryClient`, `SchemaProducer`/`SchemaConsumer`,
+  `Streamline.topicInfo`/`describeCluster`).
+- `SECURITY.md` supported-versions table now covers 0.4.x.
 
 ### Fixed (previously released work)
 - `npm run build` no longer fails resolving the optional native addon. The

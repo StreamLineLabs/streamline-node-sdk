@@ -1,5 +1,5 @@
 {
-  "name": "streamline",
+  "name": "@streamlinelabs/sdk",
   "version": "0.3.0",
   "description": "Node.js SDK for Streamline - The AI-Native Streaming Platform",
   "main": "dist/index.js",
@@ -14,19 +14,37 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "NOTICE",
+    "LICENSE"
+  ],
+  "workspaces": [
+    "testcontainers"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "build:workspaces": "npm run build --workspaces --if-present",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "test": "vitest run --exclude '**/conformance*'",
     "test:conformance": "vitest run conformance",
+    "test:workspaces": "npm run test --workspaces --if-present",
     "test:watch": "vitest --exclude '**/conformance*'",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit --project tsconfig.test.json",
+    "typecheck:examples": "tsc --noEmit --project tsconfig.examples.json",
+    "typecheck:workspaces": "npm run typecheck --workspaces --if-present",
+    "smoke:cjs": "node -e \"const s=require('./dist/index.js'); const missing=['Streamline','Producer','Consumer','UnsupportedOperationError'].filter(k=>s[k]===undefined); if(missing.length){console.error('CJS build is missing exports: '+missing.join(', ')); process.exit(1);} console.log('CJS require smoke test OK');\"",
+    "smoke:esm": "node -e \"import('./dist/index.mjs').then(m=>{const missing=['Streamline','Producer','Consumer','UnsupportedOperationError'].filter(k=>m[k]===undefined); if(missing.length){console.error('ESM build is missing exports: '+missing.join(', ')); process.exit(1);} console.log('ESM import smoke test OK');}).catch(e=>{console.error(e); process.exit(1);});\"",
+    "smoke:workspaces": "npm run smoke --workspaces --if-present",
+    "smoke": "npm run smoke:cjs && npm run smoke:esm && npm run smoke:workspaces",
+    "pack:dry": "npm pack --dry-run && npm pack --dry-run --workspace @streamlinelabs/testcontainers",
+    "audit:runtime": "npm audit --omit=dev",
+    "verify:tag": "node -e \"const v=require('./package.json').version; const raw=process.env.RELEASE_TAG||process.env.GITHUB_REF_NAME||''; const t=raw.replace(/^v/,''); if(!t){console.error('No release tag found: set RELEASE_TAG or GITHUB_REF_NAME'); process.exit(1);} if(t!==v){console.error('Release tag '+raw+' does not match package version '+v); process.exit(1);} console.log('Release tag matches package version '+v);\"",
+    "validate": "npm run audit:runtime && npm run lint && npm run typecheck && npm run typecheck:tests && npm run typecheck:examples && npm run typecheck:workspaces && npm run test && npm run test:workspaces && npm run build && npm run build:workspaces && npm run smoke && npm run pack:dry",
     "docs": "typedoc src/index.ts --out docs/api",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run validate"
   },
   "keywords": [
     "streamline",

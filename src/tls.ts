@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { createTlsOptions, loadCertificateFromFile } from 'streamline';
+ * import { createTlsOptions, loadCertificateFromFile } from '@streamlinelabs/sdk';
  *
  * const tls = createTlsOptions({
  *   enabled: true,

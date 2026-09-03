@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { Streamline } from 'streamline';
+ * import { Streamline } from '@streamlinelabs/sdk';
  *
  * const client = new Streamline('localhost:9092');
  * await client.connect();

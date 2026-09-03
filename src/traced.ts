@@ -8,7 +8,7 @@
  *
  * @example
  * ```typescript
- * import { Streamline, Producer, Consumer, StreamlineTracing, TracedProducer, TracedConsumer } from 'streamline';
+ * import { Streamline, Producer, Consumer, StreamlineTracing, TracedProducer, TracedConsumer } from '@streamlinelabs/sdk';
  *
  * const client = new Streamline('localhost:9092');
  * const tracing = new StreamlineTracing();
