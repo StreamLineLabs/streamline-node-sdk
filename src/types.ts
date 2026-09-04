@@ -24,6 +24,19 @@ export interface Message {
   key?: string;
   /** Message value (parsed JSON or raw string) */
   value: unknown;
+  /**
+   * The exact raw bytes of the message value as received on the wire, prior
+   * to JSON parsing. Populated by {@link Streamline.consume} and
+   * {@link Streamline.consumeBatch}; absent on hand-constructed `Message`
+   * objects (e.g. in tests).
+   *
+   * Integrity checks such as {@link StreamlineVerifier} hash this field
+   * rather than re-serializing {@link Message.value}, because
+   * `JSON.stringify(JSON.parse(x))` is not guaranteed to reproduce `x`
+   * byte-for-byte (key order, whitespace, number formatting) and hashing a
+   * reserialized copy would verify the wrong bytes.
+   */
+  rawValue?: Buffer;
   /** Message timestamp in milliseconds */
   timestamp: number;
   /** Message headers */
@@ -86,15 +99,48 @@ export interface SearchResult {
 export interface TopicInfo {
   /** Topic name */
   name: string;
-  /** Number of partitions */
+  /**
+   * Number of partitions using the current field name.
+   *
+   * Optional for source compatibility with SDK releases whose public shape
+   * exposed only {@link TopicInfo.partitionCount}.
+   */
+  partitions?: number | undefined;
+  /**
+   * Number of partitions.
+   *
+   * @deprecated Use {@link TopicInfo.partitions}. Retained as a compatibility
+   * alias for earlier SDK releases.
+   */
   partitionCount: number;
   /** Replication factor */
   replicationFactor: number;
   /** Total message count across all partitions */
   messageCount: number;
-  /** Total size in bytes */
+  /** Retention time in milliseconds, when configured */
+  retentionMs?: number | undefined;
+  /**
+   * ISO 8601 topic creation timestamp reported by the server.
+   *
+   * Optional because this field was introduced after the original public
+   * TopicInfo shape.
+   */
+  createdAt?: string | undefined;
+  /**
+   * Total size in bytes.
+   *
+   * @deprecated Streamline 0.3's topic query does not report a per-topic
+   * byte size, so the HTTP/GraphQL transport returns the compatibility
+   * sentinel `0`. Do not interpret it as a measured size.
+   */
   sizeBytes: number;
-  /** Topic configuration */
+  /**
+   * Topic configuration.
+   *
+   * @deprecated Streamline 0.3's topic query does not expose the topic's
+   * live configuration map, so the HTTP/GraphQL transport returns an empty
+   * compatibility object. Do not interpret it as authoritative configuration.
+   */
   config: Record<string, string>;
 }
 
@@ -140,9 +186,27 @@ export interface ConsumerGroupInfo {
   state: string;
   /** Protocol type (consumer, connect) */
   protocolType: string;
-  /** Partition assignment protocol */
+  /**
+   * Number of active group members.
+   *
+   * Optional because earlier SDK releases exposed only the members array.
+   */
+  memberCount?: number | undefined;
+  /**
+   * Partition assignment protocol.
+   *
+   * @deprecated Streamline 0.3's consumerGroups query does not report the
+   * partition-assignment protocol, so the HTTP/GraphQL transport returns the
+   * compatibility sentinel `""`.
+   */
   protocol: string;
-  /** Group members */
+  /**
+   * Group members.
+   *
+   * @deprecated Streamline 0.3's consumerGroups query does not report
+   * individual members, only {@link ConsumerGroupInfo.memberCount}, so this
+   * is an empty compatibility list.
+   */
   members: ConsumerGroupMember[];
 }
 
@@ -150,11 +214,35 @@ export interface ConsumerGroupInfo {
  * Cluster information.
  */
 export interface ClusterInfo {
-  /** Cluster ID */
+  /** Node/broker ID, when reported by current servers */
+  nodeId?: number | undefined;
+  /** Streamline server version, when reported */
+  version?: string | undefined;
+  /** Server uptime in seconds, when reported */
+  uptime?: number | undefined;
+  /** Number of topics, when reported */
+  topicCount?: number | undefined;
+  /**
+   * Cluster ID.
+   *
+   * @deprecated Streamline 0.3's clusterInfo query exposes no cluster
+   * identifier, so this is the compatibility sentinel `""`.
+   */
   clusterId: string;
-  /** Controller broker ID */
+  /**
+   * Controller broker ID.
+   *
+   * @deprecated Streamline 0.3's clusterInfo query does not identify a
+   * controller broker, so this is the compatibility sentinel `-1`. Do not
+   * assume it equals {@link ClusterInfo.nodeId}.
+   */
   controller: number;
-  /** Broker information */
+  /**
+   * Broker information.
+   *
+   * @deprecated Streamline 0.3's clusterInfo query reports no per-broker
+   * host/port list, so this is an empty compatibility list.
+   */
   brokers: BrokerInfo[];
 }
 
@@ -256,6 +344,30 @@ export class TimeoutError extends StreamlineError {
   constructor(message: string) {
     super(message, 'TIMEOUT', true, undefined, 'Consider increasing timeout settings or checking server load');
     this.name = 'TimeoutError';
+  }
+}
+
+/**
+ * Raised when an API surface exists for Kafka compatibility but the operation
+ * cannot be honoured by the Streamline HTTP/GraphQL transport.
+ *
+ * The SDK throws this instead of silently accepting a request it cannot
+ * fulfil, so that callers never observe a success that did not happen.
+ */
+export class UnsupportedOperationError extends StreamlineError {
+  /** The operation that is not supported (e.g. `Consumer.onRebalance`). */
+  operation: string;
+
+  constructor(operation: string, reason: string, hint?: string) {
+    super(
+      `${operation} is not supported by this client: ${reason}`,
+      'UNSUPPORTED_OPERATION',
+      false,
+      undefined,
+      hint,
+    );
+    this.name = 'UnsupportedOperationError';
+    this.operation = operation;
   }
 }
 

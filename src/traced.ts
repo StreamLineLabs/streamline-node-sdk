@@ -8,7 +8,7 @@
  *
  * @example
  * ```typescript
- * import { Streamline, Producer, Consumer, StreamlineTracing, TracedProducer, TracedConsumer } from 'streamline';
+ * import { Streamline, Producer, Consumer, StreamlineTracing, TracedProducer, TracedConsumer } from '@streamlinelabs/sdk';
  *
  * const client = new Streamline('localhost:9092');
  * const tracing = new StreamlineTracing();
@@ -168,7 +168,7 @@ export class TracedConsumer implements AsyncIterable<Message> {
         msg.partition,
         msg.offset,
         headers,
-        async () => msg,
+        () => Promise.resolve(msg),
       );
     }
   }
@@ -185,27 +185,31 @@ export class TracedConsumer implements AsyncIterable<Message> {
     );
   }
 
-  /** Commit current offsets. */
+  /** Commit current offsets. Rejects when the commit fails. */
   async commit(offsets?: Map<string, number>): Promise<void> {
     return this.consumer.commit(offsets);
   }
 
-  /** Seek to a specific offset. */
+  /**
+   * Seek a partition to an offset.
+   *
+   * @throws {UnsupportedOperationError} Always — see {@link Consumer.seek}.
+   */
   async seek(partition: number, offset: number): Promise<void> {
     return this.consumer.seek(partition, offset);
   }
 
-  /** Seek to the beginning of partitions. */
+  /** Seek to the beginning. Rejects because the HTTP API cannot reset offsets. */
   async seekToBeginning(partitions?: number[]): Promise<void> {
     return this.consumer.seekToBeginning(partitions);
   }
 
-  /** Seek to the end of partitions. */
+  /** Seek to the end. Rejects because the HTTP API cannot reset offsets. */
   async seekToEnd(partitions?: number[]): Promise<void> {
     return this.consumer.seekToEnd(partitions);
   }
 
-  /** Pause consumption. */
+  /** Pause consumption. Held records are not discarded. */
   pause(partitions?: number[]): void {
     this.consumer.pause(partitions);
   }
@@ -215,7 +219,16 @@ export class TracedConsumer implements AsyncIterable<Message> {
     this.consumer.resume(partitions);
   }
 
-  /** Register a rebalance handler. */
+  /** Whether consumption is paused. */
+  isPaused(partition?: number): boolean {
+    return this.consumer.isPaused(partition);
+  }
+
+  /**
+   * Register a rebalance handler.
+   *
+   * @throws {UnsupportedOperationError} Always — see {@link Consumer.onRebalance}.
+   */
   onRebalance(handler: (event: RebalanceEvent) => Promise<void>): void {
     this.consumer.onRebalance(handler);
   }

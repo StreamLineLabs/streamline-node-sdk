@@ -4,8 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.2.x   | :white_check_mark: |
-| < 0.2   | :x:                |
+| 0.4.x   | :white_check_mark: |
+| < 0.4   | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -30,5 +30,5 @@ We follow responsible disclosure practices and will credit reporters (with permi
 
 ## Security Best Practices
 
-For production deployments, please review the [Streamline Security Documentation](https://github.com/streamlinelabs/streamline-docs).
-
+For production deployments, review the core server's
+[security policy](https://github.com/streamlinelabs/streamline/blob/main/SECURITY.md).

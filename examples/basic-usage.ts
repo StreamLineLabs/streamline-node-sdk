@@ -8,11 +8,11 @@
  *   npx tsx examples/basic-usage.ts
  */
 
-import { Streamline, Producer, Consumer } from 'streamline';
+import { Streamline, Producer, Consumer } from '@streamlinelabs/sdk';
 
 async function main() {
   // Create a client
-  const client = new Streamline(process.env.STREAMLINE_BOOTSTRAP_SERVERS || 'localhost:9092', {
+  const client = new Streamline(process.env['STREAMLINE_BOOTSTRAP_SERVERS'] || 'localhost:9092', {
     httpEndpoint: 'http://localhost:9094',
     clientId: 'node-example',
   });

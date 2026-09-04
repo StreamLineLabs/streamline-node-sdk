@@ -96,8 +96,7 @@ export class MemoryClient extends MoonshotHttpClient {
     if (kind === 'procedure') body['skill'] = params.skill;
 
     const data = await this.call('/api/v1/memory/remember', body);
-    const items: WrittenWire[] =
-      ((data as { written?: WrittenWire[] } | null)?.written ?? []) as WrittenWire[];
+    const items: WrittenWire[] = (data as { written?: WrittenWire[] } | null)?.written ?? [];
     return items.map((e) => ({ topic: e.topic, offset: Number(e.offset) }));
   }
 
@@ -114,8 +113,7 @@ export class MemoryClient extends MoonshotHttpClient {
       min_hits: params.minHits ?? 0,
     };
     const data = await this.call('/api/v1/memory/recall', body);
-    const hits: RecalledWire[] =
-      ((data as { hits?: RecalledWire[] } | null)?.hits ?? []) as RecalledWire[];
+    const hits: RecalledWire[] = (data as { hits?: RecalledWire[] } | null)?.hits ?? [];
     return hits.map((h) => ({
       tier: String(h.tier ?? ''),
       topic: String(h.topic ?? ''),

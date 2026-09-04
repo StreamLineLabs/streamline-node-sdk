@@ -10,7 +10,7 @@
  *   npx tsx examples/schema-registry.ts
  */
 
-import { Streamline, SchemaRegistry } from 'streamline';
+import { Streamline, SchemaRegistry, SchemaProducer, SchemaConsumer } from '@streamlinelabs/sdk';
 
 // Avro schema for a User record
 const USER_SCHEMA = JSON.stringify({
@@ -38,7 +38,7 @@ interface User {
 async function main() {
   // === 1. Create the Streamline client and schema registry ===
   const client = new Streamline(
-    process.env.STREAMLINE_BOOTSTRAP_SERVERS || 'localhost:9092',
+    process.env['STREAMLINE_BOOTSTRAP_SERVERS'] || 'localhost:9092',
     {
       httpEndpoint: 'http://localhost:9094',
       clientId: 'node-schema-example',
@@ -46,7 +46,7 @@ async function main() {
   );
 
   const registry = new SchemaRegistry(
-    process.env.STREAMLINE_SCHEMA_REGISTRY_URL || 'http://localhost:9094',
+    process.env['STREAMLINE_SCHEMA_REGISTRY_URL'] || 'http://localhost:9094',
   );
 
   await client.connect();
@@ -68,6 +68,15 @@ async function main() {
 
   // === 4. Produce messages with schema validation ===
   console.log('\n=== Producing Messages with Schema ===');
+  // Schema-aware produce goes through SchemaProducer, which prefixes each
+  // payload with the Confluent-style wire format (magic byte + schema id).
+  const schemaProducer = new SchemaProducer(client, {
+    subject: SUBJECT,
+    schema: USER_SCHEMA,
+    schemaType: 'AVRO',
+    schemaRegistryUrl: process.env['STREAMLINE_SCHEMA_REGISTRY_URL'] || 'http://localhost:9094',
+  });
+
   for (let i = 0; i < 5; i++) {
     const user: User = {
       id: i,
@@ -76,10 +85,7 @@ async function main() {
       created_at: '2025-01-15T10:00:00Z',
     };
 
-    const result = await client.produce(TOPIC, user, {
-      key: `user-${i}`,
-      schemaId,
-    });
+    const result = await schemaProducer.send(TOPIC, { ...user }, { key: `user-${i}` });
     console.log(
       `Produced user-${i} at partition=${result.partition}, offset=${result.offset}`,
     );
@@ -87,16 +93,20 @@ async function main() {
 
   // === 5. Consume and deserialize with schema ===
   console.log('\n=== Consuming Messages with Schema ===');
-  const messages = await client.consumeBatch(TOPIC, {
+  const schemaConsumer = new SchemaConsumer(
+    client,
+    process.env['STREAMLINE_SCHEMA_REGISTRY_URL'] || 'http://localhost:9094',
+  );
+  const messages = await schemaConsumer.consume<User>(TOPIC, {
     fromBeginning: true,
     maxMessages: 10,
-    schemaRegistry: registry,
   });
 
   for (const msg of messages) {
-    const user = msg.value as User;
+    const user = msg.value;
     console.log(
       `Received: partition=${msg.partition}, offset=${msg.offset}, ` +
+        `schemaId=${msg.schemaId}, ` +
         `user={id:${user.id}, name:${user.name}, email:${user.email}}`,
     );
   }

@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { Streamline } from 'streamline';
+ * import { Streamline } from '@streamlinelabs/sdk';
  *
  * const client = new Streamline('localhost:9092');
  * await client.connect();
@@ -54,8 +54,7 @@ export type { StreamlineClientConfig } from './config';
 
 // Local attestation verifier
 export { StreamlineVerifier, ATTEST_HEADER } from './verifier';
-export type { VerificationResult } from './verifier';
+export type { VerificationResult, TrustedKeys } from './verifier';
 
 // Moonshot HTTP clients (Experimental — wraps broker /api/v1/* admin/AI APIs)
 export * from './moonshot';
-

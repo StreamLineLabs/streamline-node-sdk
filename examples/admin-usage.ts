@@ -8,11 +8,11 @@
  *   npx tsx examples/admin-usage.ts
  */
 
-import { Streamline } from 'streamline';
+import { Streamline } from '@streamlinelabs/sdk';
 
 async function main() {
   const client = new Streamline(
-    process.env.STREAMLINE_BOOTSTRAP_SERVERS || 'localhost:9092',
+    process.env['STREAMLINE_BOOTSTRAP_SERVERS'] || 'localhost:9092',
     {
       httpEndpoint: 'http://localhost:9094',
       clientId: 'node-admin-example',
@@ -29,9 +29,9 @@ async function main() {
     console.log('Created topic "events" with 3 partitions');
 
     const topics = await client.listTopics();
-    console.log('Topics:', topics.map(t => t.name));
+    console.log('Topics:', topics);
 
-    const details = await client.describeTopic('events');
+    const details = await client.topicInfo('events');
     console.log('Topic details:', details);
 
     // --- Consumer Groups ---
@@ -41,9 +41,10 @@ async function main() {
 
     // --- Cluster Info ---
     console.log('\n=== Cluster Info ===');
-    const cluster = await client.clusterInfo();
-    console.log('Cluster ID:', cluster.clusterId);
-    console.log('Brokers:', cluster.brokers);
+    const cluster = await client.describeCluster();
+    console.log('Node ID:', cluster.nodeId);
+    console.log('Server version:', cluster.version);
+    console.log('Topic count:', cluster.topicCount);
 
     // --- Cleanup ---
     await client.deleteTopic('events');

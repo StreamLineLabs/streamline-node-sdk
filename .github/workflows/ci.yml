@@ -4,34 +4,66 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "22.22.0"
           cache: npm
 
       - run: npm ci
-      - run: npm run build
-      - run: npm test
-      - run: npm run typecheck
-      - run: npm run lint
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check sources
+        run: npm run typecheck
+
+      - name: Type-check tests
+        run: npm run typecheck:tests
+
+      # Fail-closed: examples are documentation and must compile against the
+      # public API. Previously masked with `|| echo`, which hid real breakage.
       - name: Type-check examples
-        run: npx tsc --noEmit --esModuleInterop --moduleResolution node --target ES2020 --module ES2020 --skipLibCheck examples/*.ts 2>/dev/null || echo "Example type-check completed (warnings are non-blocking)"
+        run: npm run typecheck:examples
+
+      - name: Type-check workspaces
+        run: npm run typecheck:workspaces
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Workspace tests
+        run: npm run test:workspaces
+
+      - name: Build (CJS + ESM + types)
+        run: npm run build
+
+      - name: Build workspaces
+        run: npm run build:workspaces
+
+      - name: CJS / ESM import smoke tests
+        run: npm run smoke
+
+      - name: Package contents (dry run)
+        run: npm run pack:dry
 
   conformance:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "22.22.0"
           cache: npm
 
       - run: npm ci
@@ -54,7 +86,12 @@ jobs:
           docker compose -f docker-compose.test.yml logs
           exit 1
 
+      # STREAMLINE_CONFORMANCE_REQUIRE turns an unreachable server into a test
+      # failure instead of a silent skip, so this job cannot pass green when
+      # the fixture is down.
       - name: Run conformance tests
+        env:
+          STREAMLINE_CONFORMANCE_REQUIRE: "1"
         run: npm run test:conformance
 
       - name: Stop Streamline server

@@ -7,13 +7,17 @@
 import type { AuthConfig } from './auth';
 import type { TlsConfig } from './tls';
 import { StreamlineError } from './types';
+import {
+  assertAuthTransportSupported,
+  assertTlsTransportSupported,
+} from './internal/transport-support';
 
 /**
  * Complete client configuration for connecting to a Streamline cluster.
  *
  * @example
  * ```typescript
- * import { StreamlineClientConfig, validateConfig } from 'streamline';
+ * import { StreamlineClientConfig, validateConfig } from '@streamlinelabs/sdk';
  *
  * const config: StreamlineClientConfig = {
  *   bootstrapServers: 'broker1:9092,broker2:9092',
@@ -149,6 +153,12 @@ export function validateConfig(config: StreamlineClientConfig): void {
         'Set mechanism to PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, or OAUTHBEARER',
       );
     }
+
+    // SCRAM is validated as a well-formed mechanism above, but the HTTP
+    // transport this config is destined for cannot perform a real SCRAM
+    // handshake — reject it here too instead of letting it surface only at
+    // first request time (as a silent downgrade to Basic auth).
+    assertAuthTransportSupported(auth.mechanism, 'auth.mechanism');
   }
 
   // --- tls ---
@@ -174,6 +184,12 @@ export function validateConfig(config: StreamlineClientConfig): void {
         'Set tls.enabled to true or false',
       );
     }
+
+    // Custom CA / mTLS / rejectUnauthorized overrides are validated as
+    // well-formed above, but never applied to this transport's fetch()
+    // requests — reject them here rather than letting them silently do
+    // nothing at request time.
+    assertTlsTransportSupported(tls);
   }
 
   // --- auth + tls consistency ---

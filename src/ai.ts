@@ -3,6 +3,7 @@
  */
 
 import { StreamlineError } from './types';
+import { coerceNumber, coerceString, isRecord, parseJson } from './internal/guards';
 
 export interface EmbeddingResult {
   vectors: number[][];
@@ -27,6 +28,27 @@ export interface RAGResponse {
   answer: string;
   sources: { offset: number; score: number }[];
   model: string;
+}
+
+/** SSE `data:` line prefix used by the anomaly detection stream. */
+const SSE_DATA_PREFIX = 'data: ';
+
+/**
+ * Map one decoded anomaly event onto the public {@link AnomalyAlert} shape.
+ *
+ * @param payload - Parsed JSON body of an SSE `data:` line
+ * @returns The alert, or `undefined` when the payload is not a JSON object
+ */
+export function toAnomalyAlert(payload: unknown): AnomalyAlert | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+  return {
+    field: coerceString(payload['field'], ''),
+    value: coerceNumber(payload['value'], 0),
+    zScore: coerceNumber(payload['z_score'], 0),
+    timestamp: coerceNumber(payload['timestamp'], 0),
+  };
 }
 
 /**
@@ -81,22 +103,22 @@ export class AIClient {
     let buffer = '';
 
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const result = await reader.read();
+      if (result.done) break;
 
-      buffer += decoder.decode(value, { stream: true });
+      const chunk: unknown = result.value;
+      if (chunk instanceof Uint8Array || chunk instanceof ArrayBuffer) {
+        buffer += decoder.decode(chunk, { stream: true });
+      }
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = JSON.parse(line.slice(6));
-          yield {
-            field: data.field,
-            value: data.value,
-            zScore: data.z_score,
-            timestamp: data.timestamp,
-          };
+        if (line.startsWith(SSE_DATA_PREFIX)) {
+          const alert = toAnomalyAlert(parseJson(line.slice(SSE_DATA_PREFIX.length)));
+          if (alert) {
+            yield alert;
+          }
         }
       }
     }

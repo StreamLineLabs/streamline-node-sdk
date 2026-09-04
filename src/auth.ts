@@ -7,7 +7,7 @@
  *
  * @example
  * ```typescript
- * import { createSaslAuthenticator } from 'streamline';
+ * import { createSaslAuthenticator } from '@streamlinelabs/sdk';
  *
  * // PLAIN auth
  * const auth = createSaslAuthenticator({

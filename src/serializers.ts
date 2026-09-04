@@ -25,9 +25,33 @@
  * ```
  */
 
+import { fromSync } from './internal/async';
+import { parseJsonObject } from './internal/guards';
+
 export interface SchemaRegistryConfig {
   url: string;
   autoRegister?: boolean;
+}
+
+/**
+ * Strip the Confluent wire-format envelope from a payload, if present.
+ *
+ * The envelope is a magic byte (`0x00`) followed by a 4-byte big-endian schema
+ * id. Payloads without it are returned unchanged.
+ */
+export function stripWireFormatHeader(data: Uint8Array): Uint8Array {
+  return data.length >= 5 && data[0] === 0x00 ? data.slice(5) : data;
+}
+
+/**
+ * Decode a (optionally wire-format framed) UTF-8 JSON object payload.
+ *
+ * @throws SyntaxError when the payload is not valid JSON
+ * @throws TypeError when the payload does not decode to a JSON object
+ */
+function decodeJsonPayload(data: Uint8Array): Record<string, unknown> {
+  const payload = stripWireFormatHeader(data);
+  return parseJsonObject(new TextDecoder().decode(payload), 'Failed to deserialize payload');
 }
 
 export class SchemaRegistryClient {
@@ -107,17 +131,8 @@ export class JsonSchemaSerializer {
     return payload;
   }
 
-  async deserialize(data: Uint8Array): Promise<Record<string, unknown>> {
-    let payload: Uint8Array;
-
-    // Check for Confluent wire format prefix
-    if (data.length >= 5 && data[0] === 0x00) {
-      payload = data.slice(5);
-    } else {
-      payload = data;
-    }
-
-    return JSON.parse(new TextDecoder().decode(payload));
+  deserialize(data: Uint8Array): Promise<Record<string, unknown>> {
+    return fromSync(() => decodeJsonPayload(data));
   }
 }
 
@@ -184,15 +199,7 @@ export class AvroSchemaSerializer {
     return payload;
   }
 
-  async deserialize(data: Uint8Array): Promise<Record<string, unknown>> {
-    let payload: Uint8Array;
-
-    if (data.length >= 5 && data[0] === 0x00) {
-      payload = data.slice(5);
-    } else {
-      payload = data;
-    }
-
-    return JSON.parse(new TextDecoder().decode(payload));
+  deserialize(data: Uint8Array): Promise<Record<string, unknown>> {
+    return fromSync(() => decodeJsonPayload(data));
   }
 }

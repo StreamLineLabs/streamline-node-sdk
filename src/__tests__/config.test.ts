@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateConfig } from '../config';
 import type { StreamlineClientConfig } from '../config';
+import { UnsupportedOperationError } from '../types';
 
 describe('validateConfig', () => {
   const validConfig: StreamlineClientConfig = {
@@ -74,13 +75,28 @@ describe('validateConfig', () => {
   });
 
   describe('auth validation', () => {
-    it('should accept valid auth config', () => {
+    it('should accept valid, transport-supported auth config', () => {
+      expect(() =>
+        validateConfig({
+          bootstrapServers: 'localhost:9092',
+          auth: { mechanism: 'PLAIN', username: 'user', password: 'pass' },
+        }),
+      ).not.toThrow();
+    });
+
+    it('should reject SCRAM mechanisms this HTTP transport cannot genuinely perform', () => {
       expect(() =>
         validateConfig({
           bootstrapServers: 'localhost:9092',
           auth: { mechanism: 'SCRAM-SHA-256', username: 'user', password: 'pass' } as any,
         }),
-      ).not.toThrow();
+      ).toThrow(UnsupportedOperationError);
+      expect(() =>
+        validateConfig({
+          bootstrapServers: 'localhost:9092',
+          auth: { mechanism: 'SCRAM-SHA-512', username: 'user', password: 'pass' } as any,
+        }),
+      ).toThrow(UnsupportedOperationError);
     });
 
     it('should reject auth without mechanism', () => {
@@ -119,6 +135,33 @@ describe('validateConfig', () => {
           tls: {} as any,
         }),
       ).toThrow(/tls\.enabled/);
+    });
+
+    it('should reject a custom CA that is never applied to fetch() requests', () => {
+      expect(() =>
+        validateConfig({
+          bootstrapServers: 'localhost:9092',
+          tls: { enabled: true, ca: '-----BEGIN CERTIFICATE-----\n...' },
+        }),
+      ).toThrow(UnsupportedOperationError);
+    });
+
+    it('should reject mTLS cert/key that is never presented on the wire', () => {
+      expect(() =>
+        validateConfig({
+          bootstrapServers: 'localhost:9092',
+          tls: { enabled: true, cert: 'client.pem', key: 'client-key.pem' },
+        }),
+      ).toThrow(UnsupportedOperationError);
+    });
+
+    it('should reject rejectUnauthorized: false, which fetch() never honours', () => {
+      expect(() =>
+        validateConfig({
+          bootstrapServers: 'localhost:9092',
+          tls: { enabled: true, rejectUnauthorized: false },
+        }),
+      ).toThrow(UnsupportedOperationError);
     });
   });
 

@@ -1,9 +1,9 @@
 /**
  * Streamline Agent Memory Example.
  *
- * Demonstrates the memory MCP tools (remember, recall) for building
- * agents with persistent, semantically searchable memory. Shows both
- * single-agent memory and multi-agent shared memory via namespaces.
+ * Demonstrates the memory HTTP API (`remember`, `recall`) for building agents
+ * with persistent, semantically searchable memory, and how several agents can
+ * write into the same memory store while recalling with their own agent id.
  *
  * Ensure a Streamline server is running with memory features enabled:
  *   streamline --playground
@@ -12,13 +12,13 @@
  *   npx tsx examples/agent-memory.ts
  */
 
-import { Streamline } from 'streamline';
+import { MemoryClient } from '@streamlinelabs/sdk';
 
-async function singleAgentMemory(client: Streamline): Promise<void> {
+async function singleAgentMemory(memory: MemoryClient): Promise<void> {
   console.log('=== Single Agent Memory ===');
 
   // Store architectural decisions
-  await client.memoryRemember({
+  await memory.remember({
     agentId: 'demo-agent',
     content: 'We chose PostgreSQL for its JSONB support and mature ecosystem',
     kind: 'fact',
@@ -26,7 +26,7 @@ async function singleAgentMemory(client: Streamline): Promise<void> {
     tags: ['architecture', 'database'],
   });
 
-  await client.memoryRemember({
+  await memory.remember({
     agentId: 'demo-agent',
     content: 'Redis is used as a caching layer with a 15-minute TTL',
     kind: 'fact',
@@ -34,10 +34,10 @@ async function singleAgentMemory(client: Streamline): Promise<void> {
     tags: ['architecture', 'caching'],
   });
 
-  await client.memoryRemember({
+  await memory.remember({
     agentId: 'demo-agent',
     content: 'User requested dark mode support in the dashboard',
-    kind: 'preference',
+    kind: 'observation',
     importance: 0.6,
     tags: ['ui', 'user-request'],
   });
@@ -46,7 +46,7 @@ async function singleAgentMemory(client: Streamline): Promise<void> {
 
   // Recall by semantic similarity
   console.log("--- Recall: 'why did we pick our database?' ---");
-  const dbResults = await client.memoryRecall({
+  const dbResults = await memory.recall({
     agentId: 'demo-agent',
     query: 'why did we pick our database?',
     k: 5,
@@ -56,7 +56,7 @@ async function singleAgentMemory(client: Streamline): Promise<void> {
   }
 
   console.log("\n--- Recall: 'caching strategy' ---");
-  const cacheResults = await client.memoryRecall({
+  const cacheResults = await memory.recall({
     agentId: 'demo-agent',
     query: 'caching strategy',
     k: 5,
@@ -66,13 +66,12 @@ async function singleAgentMemory(client: Streamline): Promise<void> {
   }
 }
 
-async function multiAgentSharedMemory(client: Streamline): Promise<void> {
-  console.log('\n=== Multi-Agent Shared Memory ===');
+async function multiAgentMemory(memory: MemoryClient): Promise<void> {
+  console.log('\n=== Multi-Agent Memory ===');
 
-  // Agent A stores a decision in the shared namespace
-  await client.memoryRemember({
+  // Each agent owns its memories; recall is scoped by agent id.
+  await memory.remember({
     agentId: 'agent-a',
-    namespace: 'team-shared',
     content: 'Deploy target is Kubernetes on AWS EKS',
     kind: 'fact',
     importance: 0.9,
@@ -80,10 +79,8 @@ async function multiAgentSharedMemory(client: Streamline): Promise<void> {
   });
   console.log('Agent A stored deployment decision');
 
-  // Agent B stores related context in the same namespace
-  await client.memoryRemember({
+  await memory.remember({
     agentId: 'agent-b',
-    namespace: 'team-shared',
     content: 'CI/CD pipeline uses GitHub Actions with OIDC auth to AWS',
     kind: 'fact',
     importance: 0.8,
@@ -91,11 +88,9 @@ async function multiAgentSharedMemory(client: Streamline): Promise<void> {
   });
   console.log('Agent B stored CI/CD context');
 
-  // Agent C recalls shared memories from the team namespace
-  console.log("\n--- Agent C recalls 'deployment infrastructure' from shared namespace ---");
-  const results = await client.memoryRecall({
-    agentId: 'agent-c',
-    namespace: 'team-shared',
+  console.log("\n--- Agent A recalls 'deployment infrastructure' ---");
+  const results = await memory.recall({
+    agentId: 'agent-a',
     query: 'deployment infrastructure',
     k: 5,
   });
@@ -105,21 +100,13 @@ async function multiAgentSharedMemory(client: Streamline): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const client = new Streamline(
-    process.env.STREAMLINE_BOOTSTRAP_SERVERS || 'localhost:9092',
-    {
-      httpEndpoint: process.env.STREAMLINE_HTTP || 'http://localhost:9094',
-      clientId: 'agent-memory-example',
-    },
-  );
+  const memory = new MemoryClient({
+    httpUrl: process.env['STREAMLINE_HTTP'] ?? 'http://localhost:9094',
+  });
 
-  await client.connect();
-  console.log('Connected to Streamline\n');
+  await singleAgentMemory(memory);
+  await multiAgentMemory(memory);
 
-  await singleAgentMemory(client);
-  await multiAgentSharedMemory(client);
-
-  await client.close();
   console.log('\nDone!');
 }
 

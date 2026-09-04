@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Admin } from '../admin';
 import { Streamline } from '../client';
-import { StreamlineError } from '../types';
+import { UnsupportedOperationError } from '../types';
 
 describe('Admin', () => {
   let mockClient: Streamline;
@@ -17,10 +17,10 @@ describe('Admin', () => {
   });
 
   describe('admin methods require server connection', () => {
-    it('alterTopicConfig rejects without server', async () => {
+    it('alterTopicConfig rejects explicitly when absent from the server schema', async () => {
       await expect(
         admin.alterTopicConfig('test', { 'retention.ms': '86400000' })
-      ).rejects.toThrow();
+      ).rejects.toBeInstanceOf(UnsupportedOperationError);
     });
 
     it('createPartitions validates input', async () => {
@@ -29,12 +29,16 @@ describe('Admin', () => {
       );
     });
 
-    it('createPartitions rejects without server', async () => {
-      await expect(admin.createPartitions('test', 6)).rejects.toThrow();
+    it('createPartitions rejects explicitly when absent from the server schema', async () => {
+      await expect(admin.createPartitions('test', 6)).rejects.toBeInstanceOf(
+        UnsupportedOperationError,
+      );
     });
 
-    it('deleteConsumerGroup rejects without server', async () => {
-      await expect(admin.deleteConsumerGroup('group')).rejects.toThrow();
+    it('deleteConsumerGroup rejects explicitly when absent from the server schema', async () => {
+      await expect(admin.deleteConsumerGroup('group')).rejects.toBeInstanceOf(
+        UnsupportedOperationError,
+      );
     });
 
     it('resetConsumerGroupOffsets validates strategy', async () => {
@@ -43,14 +47,16 @@ describe('Admin', () => {
       ).rejects.toThrow('Must specify one of');
     });
 
-    it('resetConsumerGroupOffsets rejects without server', async () => {
+    it('resetConsumerGroupOffsets rejects explicitly when the server API lacks it', async () => {
       await expect(
         admin.resetConsumerGroupOffsets('group', 'topic', { toEarliest: true })
-      ).rejects.toThrow();
+      ).rejects.toBeInstanceOf(UnsupportedOperationError);
     });
 
-    it('describeBrokerConfig rejects without server', async () => {
-      await expect(admin.describeBrokerConfig(0)).rejects.toThrow();
+    it('describeBrokerConfig rejects explicitly when absent from the server schema', async () => {
+      await expect(admin.describeBrokerConfig(0)).rejects.toBeInstanceOf(
+        UnsupportedOperationError,
+      );
     });
 
     it('describeCluster rejects without server', async () => {

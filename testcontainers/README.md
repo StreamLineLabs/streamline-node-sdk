@@ -1,16 +1,17 @@
 # Testcontainers Streamline (Node.js)
 
-[![npm](https://img.shields.io/npm/v/@streamline/testcontainers?style=flat-square)](https://www.npmjs.com/package/@streamline/testcontainers)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 
-Testcontainers module for [Streamline](https://github.com/streamlinelabs/streamline) — **5x faster** than Kafka containers (~1s vs ~15s startup).
+Testcontainers module for [Streamline](https://github.com/streamlinelabs/streamline). Streamline starts as a single binary with no ZooKeeper or KRaft bootstrap, so containers are typically ready in about a second; measure on your own hardware before relying on a specific number.
+
+The default image is pinned to `ghcr.io/streamlinelabs/streamline:0.4.0`;
+override `tag` or `image` explicitly when testing another server release.
 
 ## Features
 
 - Kafka-compatible container for integration testing
-- Fast startup (~100ms vs seconds for Kafka)
-- Low memory footprint (<50MB)
-- No ZooKeeper or KRaft required
+- Single-binary server: no ZooKeeper or KRaft bootstrap step
+- Small footprint compared with a full Kafka broker
 - Built-in health check wait strategy (HTTP /health endpoint)
 - TypeScript-first with full type definitions
 - Supports playground mode with pre-seeded demo topics
@@ -18,22 +19,30 @@ Testcontainers module for [Streamline](https://github.com/streamlinelabs/streaml
 
 ## Installation
 
+> **Release status:** this workspace is **not yet published to npm**. Build it
+> from the [streamline-node-sdk](https://github.com/streamlinelabs/streamline-node-sdk)
+> repository and install the resulting tarball:
+
 ```bash
-npm install --save-dev @streamline/testcontainers
-# or
-yarn add --dev @streamline/testcontainers
-# or
-pnpm add --save-dev @streamline/testcontainers
+git clone https://github.com/streamlinelabs/streamline-node-sdk.git
+cd streamline-node-sdk
+npm install
+npm run build --workspace @streamlinelabs/testcontainers
+npm pack --workspace @streamlinelabs/testcontainers
+
+# then, from your project:
+npm install --save-dev /path/to/streamlinelabs-testcontainers-<version>.tgz
 ```
 
-> **Prerequisites**: Docker must be running on your machine. The `testcontainers` npm package is included as a dependency.
+> **Prerequisites**: Node.js 22.22 or later and Docker. The `testcontainers`
+> npm package is included as a dependency.
 
 ## Usage
 
 ### Basic Usage
 
 ```typescript
-import { StreamlineContainer } from '@streamline/testcontainers';
+import { StreamlineContainer } from '@streamlinelabs/testcontainers';
 
 const container = await new StreamlineContainer().start();
 
@@ -53,7 +62,7 @@ await container.stop();
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { StreamlineContainer, StartedStreamlineContainer } from '@streamline/testcontainers';
+import { StreamlineContainer, StartedStreamlineContainer } from '@streamlinelabs/testcontainers';
 
 describe('My Kafka Integration', () => {
   let container: StartedStreamlineContainer;
@@ -198,7 +207,7 @@ Using vitest lifecycle hooks (recommended):
 
 ```typescript
 import { beforeAll, afterAll } from 'vitest';
-import { StreamlineContainer, StartedStreamlineContainer } from '@streamline/testcontainers';
+import { StreamlineContainer, StartedStreamlineContainer } from '@streamlinelabs/testcontainers';
 
 let container: StartedStreamlineContainer;
 
@@ -215,7 +224,7 @@ Sharing a container across test files with a vitest global setup:
 
 ```typescript
 // vitest.setup.ts
-import { StreamlineContainer, StartedStreamlineContainer } from '@streamline/testcontainers';
+import { StreamlineContainer, StartedStreamlineContainer } from '@streamlinelabs/testcontainers';
 
 let container: StartedStreamlineContainer;
 
@@ -248,6 +257,10 @@ The container builder. Configure options via the constructor, then call `start()
 
 | Method | Returns | Description |
 |---|---|---|
+| `withEnvironment(env)` | `this` | Add or override environment variables |
+| `withEphemeral()` | `this` | In-memory, auto-cleanup mode |
+| `withEphemeralIdleTimeout(seconds)` | `this` | Idle timeout before ephemeral shutdown |
+| `withEphemeralAutoTopics(specs)` | `this` | Comma-separated `name:partitions` auto-topics |
 | `start()` | `Promise<StartedStreamlineContainer>` | Start the container |
 
 ### StartedStreamlineContainer
@@ -276,4 +289,3 @@ The running container. Provides connection details and management operations.
 ## License
 
 Apache-2.0
-

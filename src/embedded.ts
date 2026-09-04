@@ -27,6 +27,10 @@
  * ```
  */
 
+import { fromSync } from './internal/async';
+import { isRecord, isUnknownArray, parseJson } from './internal/guards';
+import { loadOptionalModule, moduleDir } from './internal/optional-module';
+
 export interface EmbeddedConfig {
   dataDir?: string;
   inMemory?: boolean;
@@ -42,6 +46,65 @@ export interface EmbeddedMessage {
   timestamp: number;
 }
 
+/** Module specifier of the compiled N-API addon, relative to this file. */
+const NATIVE_MODULE = '../native/streamline.node';
+
+/**
+ * Handle returned by the native addon's `create()` factory.
+ *
+ * Mirrors the C API declared in `streamline/include/streamline.h`.
+ */
+interface NativeInstance {
+  produce(topic: string, value: Buffer, key?: Buffer): void;
+  consume(topic: string, timeoutMs: number): EmbeddedMessage | null;
+  createTopic(name: string, partitions: number): void;
+  /** Returns JSON text. Typed as `unknown` because the guard only proves it is callable. */
+  query(sql: string): unknown;
+  destroy(): void;
+}
+
+/** Exports of the compiled `streamline.node` addon. */
+interface NativeBinding {
+  create(configJson: string): unknown;
+}
+
+/** Structurally validate the dynamically loaded native addon. */
+function isNativeBinding(value: unknown): value is NativeBinding {
+  return isRecord(value) && typeof value['create'] === 'function';
+}
+
+/** Structurally validate an instance handle returned by `create()`. */
+function isNativeInstance(value: unknown): value is NativeInstance {
+  return (
+    isRecord(value) &&
+    typeof value['produce'] === 'function' &&
+    typeof value['consume'] === 'function' &&
+    typeof value['createTopic'] === 'function' &&
+    typeof value['query'] === 'function' &&
+    typeof value['destroy'] === 'function'
+  );
+}
+
+/**
+ * Load the native addon, returning `null` when it has not been built.
+ *
+ * The specifier is resolved at runtime so the bundler never treats the
+ * optional binary as a build-time dependency. Resolution is anchored to this
+ * module's own directory, which is `src/` when running from source and `dist/`
+ * in the published package — both one level below the addon's `native/` home.
+ * Hosts that expose no module directory fail closed rather than resolving the
+ * relative specifier against an unrelated directory.
+ */
+function loadNativeModule(): Record<string, unknown> | null {
+  const baseDir = moduleDir(typeof __dirname === 'string' ? __dirname : undefined);
+  if (baseDir === undefined) {
+    return null;
+  }
+  const mod = loadOptionalModule(NATIVE_MODULE, baseDir);
+  return isRecord(mod) ? mod : null;
+}
+
+
 /**
  * Embedded Streamline instance.
  * 
@@ -50,28 +113,32 @@ export interface EmbeddedMessage {
  * See streamline/include/streamline.h for the C API.
  */
 export class EmbeddedStreamline {
-  private native: unknown; // Native binding handle
+  private native: NativeInstance;
   private closed = false;
 
-  private static _nativeAvailable: boolean | null = null;
+  /** `undefined` = not resolved yet, `null` = resolved and unavailable. */
+  private static _nativeModule: Record<string, unknown> | null | undefined;
+
+  /**
+   * Resolve the native addon once, caching both success and failure.
+   */
+  private static nativeModule(): Record<string, unknown> | null {
+    if (EmbeddedStreamline._nativeModule === undefined) {
+      EmbeddedStreamline._nativeModule = loadNativeModule();
+    }
+    return EmbeddedStreamline._nativeModule;
+  }
 
   /**
    * Check if the native module is available.
    */
   static get isAvailable(): boolean {
-    if (EmbeddedStreamline._nativeAvailable === null) {
-      try {
-        require('../native/streamline.node');
-        EmbeddedStreamline._nativeAvailable = true;
-      } catch {
-        EmbeddedStreamline._nativeAvailable = false;
-      }
-    }
-    return EmbeddedStreamline._nativeAvailable;
+    return EmbeddedStreamline.nativeModule() !== null;
   }
 
   constructor(config: EmbeddedConfig = {}) {
-    if (!EmbeddedStreamline.isAvailable) {
+    const mod = EmbeddedStreamline.nativeModule();
+    if (!mod) {
       throw new Error(
         'Streamline native module not found. The embedded SDK requires ' +
         'a native Rust binary (native/streamline.node) that is NOT included ' +
@@ -89,49 +156,72 @@ export class EmbeddedStreamline {
         '  docker run -d -p 9092:9092 -p 9094:9094 ghcr.io/streamlinelabs/streamline:latest'
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const binding = require('../native/streamline.node');
-    this.native = binding.create(JSON.stringify(config));
+    if (!isNativeBinding(mod)) {
+      throw new Error(
+        'Streamline native module was loaded but does not export a create() ' +
+        'factory. The addon is out of date or was built from a different ' +
+        'revision — rebuild it: cd native && npm run build'
+      );
+    }
+    const instance: unknown = mod.create(JSON.stringify(config));
+    if (!isNativeInstance(instance)) {
+      throw new Error(
+        'Streamline native module returned an unusable instance handle. ' +
+        'Rebuild the addon against this SDK version: cd native && npm run build'
+      );
+    }
+    this.native = instance;
   }
 
   /** Produce a message to a topic. */
-  async produce(topic: string, value: Buffer, key?: Buffer): Promise<void> {
-    this.ensureOpen();
-    const binding = this.native as { produce: (topic: string, value: Buffer, key?: Buffer) => void };
-    binding.produce(topic, value, key);
+  produce(topic: string, value: Buffer, key?: Buffer): Promise<void> {
+    return fromSync(() => {
+      this.ensureOpen();
+      this.native.produce(topic, value, key);
+    });
   }
 
   /** Consume a single message from a topic. */
-  async consume(topic: string, timeoutMs = 5000): Promise<EmbeddedMessage | null> {
-    this.ensureOpen();
-    const binding = this.native as { consume: (topic: string, timeout: number) => EmbeddedMessage | null };
-    return binding.consume(topic, timeoutMs);
+  consume(topic: string, timeoutMs = 5000): Promise<EmbeddedMessage | null> {
+    return fromSync(() => {
+      this.ensureOpen();
+      return this.native.consume(topic, timeoutMs);
+    });
   }
 
   /** Create a topic. */
-  async createTopic(name: string, partitions = 1): Promise<void> {
-    this.ensureOpen();
-    const binding = this.native as { createTopic: (name: string, partitions: number) => void };
-    binding.createTopic(name, partitions);
+  createTopic(name: string, partitions = 1): Promise<void> {
+    return fromSync(() => {
+      this.ensureOpen();
+      this.native.createTopic(name, partitions);
+    });
   }
 
   /** Execute a SQL query. */
-  async query(sql: string): Promise<unknown[]> {
-    this.ensureOpen();
-    const binding = this.native as { query: (sql: string) => string };
-    const json = binding.query(sql);
-    try {
-      return JSON.parse(json);
-    } catch {
-      throw new Error(`Failed to parse query response: ${json?.substring(0, 200)}`);
-    }
+  query(sql: string): Promise<unknown[]> {
+    return fromSync(() => {
+      this.ensureOpen();
+      const raw: unknown = this.native.query(sql);
+      if (typeof raw !== 'string') {
+        throw new Error(`Failed to parse query response: expected JSON text, got ${typeof raw}`);
+      }
+      let rows: unknown;
+      try {
+        rows = parseJson(raw);
+      } catch {
+        throw new Error(`Failed to parse query response: ${raw.substring(0, 200)}`);
+      }
+      if (!isUnknownArray(rows)) {
+        throw new Error(`Failed to parse query response: ${raw.substring(0, 200)}`);
+      }
+      return rows;
+    });
   }
 
   /** Close the instance and free resources. */
   close(): void {
-    if (!this.closed && this.native) {
-      const binding = this.native as { destroy: () => void };
-      binding.destroy();
+    if (!this.closed) {
+      this.native.destroy();
       this.closed = true;
     }
   }

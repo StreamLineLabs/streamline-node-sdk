@@ -1,5 +1,5 @@
 {
-  "name": "@streamline/testcontainers",
+  "name": "@streamlinelabs/testcontainers",
   "version": "0.2.0",
   "description": "Testcontainers module for Streamline - The Redis of Streaming",
   "main": "dist/index.js",
@@ -7,14 +7,16 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     }
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "NOTICE",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
@@ -22,7 +24,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "smoke:cjs": "node -e \"const s=require('./dist/index.js'); const missing=['StreamlineContainer','StartedStreamlineContainer'].filter(k=>s[k]===undefined); if(missing.length){console.error('CJS build is missing exports: '+missing.join(', ')); process.exit(1);} console.log('Testcontainers CJS require smoke test OK');\"",
+    "smoke:esm": "node -e \"import('./dist/index.mjs').then(m=>{const missing=['StreamlineContainer','StartedStreamlineContainer'].filter(k=>m[k]===undefined); if(missing.length){console.error('ESM build is missing exports: '+missing.join(', ')); process.exit(1);} console.log('Testcontainers ESM import smoke test OK');}).catch(e=>{console.error(e); process.exit(1);});\"",
+    "smoke": "npm run smoke:cjs && npm run smoke:esm",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
   },
   "keywords": [
     "streamline",
@@ -45,10 +50,10 @@
     "url": "https://github.com/streamlinelabs/streamline-node-sdk/issues"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.22.0"
   },
   "dependencies": {
-    "testcontainers": "^10.7.0"
+    "testcontainers": "^12.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
@@ -57,10 +62,10 @@
     "vitest": "^1.0.0"
   },
   "peerDependencies": {
-    "streamline": ">=0.2.0"
+    "@streamlinelabs/sdk": ">=0.4.0"
   },
   "peerDependenciesMeta": {
-    "streamline": {
+    "@streamlinelabs/sdk": {
       "optional": true
     }
   }

@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { StreamlineContainer } from '@streamline/testcontainers';
+ * import { StreamlineContainer } from '@streamlinelabs/testcontainers';
  *
  * const container = await new StreamlineContainer().start();
  * const bootstrapServers = container.getBootstrapServers();
@@ -28,7 +28,7 @@ import {
 const DEFAULT_IMAGE = 'ghcr.io/streamlinelabs/streamline';
 
 /** Default Docker image tag */
-const DEFAULT_TAG = 'latest';
+const DEFAULT_TAG = '0.4.0';
 
 /** Kafka protocol port */
 const KAFKA_PORT = 9092;
@@ -43,7 +43,7 @@ const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
  * Configuration options for the Streamline container.
  */
 export interface StreamlineContainerOptions {
-  /** Docker image tag to use (default: "latest") */
+  /** Docker image tag to use (default: "0.4.0") */
   tag?: string;
   /** Full Docker image name with tag (overrides tag option) */
   image?: string;
@@ -347,13 +347,6 @@ export class StartedStreamlineContainer {
     );
   }
 
-  /**
-   * Stops the container.
-   */
-  async stop(): Promise<void> {
-    await this.startedContainer.stop();
-  }
-
   // -------------------------------------------------------------------------
   // Enhanced capabilities: batch produce, consumer groups, migration helpers
   // -------------------------------------------------------------------------
@@ -402,7 +395,24 @@ export class StartedStreamlineContainer {
       throw new Error(`Failed to list consumer groups: ${result.output}`);
     }
     try {
-      return JSON.parse(result.output);
+      const parsed: unknown = JSON.parse(result.output);
+      if (Array.isArray(parsed)) {
+        const groupIds: string[] = [];
+        for (const value of parsed) {
+          if (typeof value === 'string') {
+            groupIds.push(value);
+          } else if (
+            typeof value === 'object' &&
+            value !== null &&
+            'group_id' in value &&
+            typeof value.group_id === 'string'
+          ) {
+            groupIds.push(value.group_id);
+          }
+        }
+        return groupIds;
+      }
+      throw new SyntaxError('consumer group listing is not a JSON array');
     } catch {
       return result.output
         .trim()
@@ -481,7 +491,7 @@ export class StartedStreamlineContainer {
  *
  * @example Basic usage
  * ```typescript
- * import { StreamlineContainer } from '@streamline/testcontainers';
+ * import { StreamlineContainer } from '@streamlinelabs/testcontainers';
  *
  * const container = await new StreamlineContainer().start();
  * const bootstrapServers = container.getBootstrapServers();
@@ -509,7 +519,7 @@ export class StartedStreamlineContainer {
  * ```
  */
 export class StreamlineContainer {
-  private readonly container: GenericContainer;
+  private container: GenericContainer;
   private readonly startupTimeoutMs: number;
 
   /**
@@ -536,6 +546,24 @@ export class StreamlineContainer {
           .forStatusCode(200)
           .withStartupTimeout(this.startupTimeoutMs)
       );
+  }
+
+  /**
+   * Adds or overrides environment variables on the container.
+   *
+   * @param environment - Environment variables to apply
+   * @returns this container builder for chaining
+   *
+   * @example
+   * ```typescript
+   * const container = await new StreamlineContainer()
+   *   .withEnvironment({ STREAMLINE_RETENTION_MS: '86400000' })
+   *   .start();
+   * ```
+   */
+  withEnvironment(environment: Record<string, string>): this {
+    this.container = this.container.withEnvironment(environment);
+    return this;
   }
 
   /**
@@ -657,4 +685,3 @@ export class StreamlineContainer {
     }).start();
   }
 }
-

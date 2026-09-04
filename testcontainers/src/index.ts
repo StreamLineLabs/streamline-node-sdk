@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { StreamlineContainer } from '@streamline/testcontainers';
+ * import { StreamlineContainer } from '@streamlinelabs/testcontainers';
  *
  * const container = await new StreamlineContainer().start();
  * const bootstrapServers = container.getBootstrapServers();
