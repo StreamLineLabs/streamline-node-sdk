@@ -4,6 +4,9 @@
 
 Testcontainers module for [Streamline](https://github.com/streamlinelabs/streamline). Streamline starts as a single binary with no ZooKeeper or KRaft bootstrap, so containers are typically ready in about a second; measure on your own hardware before relying on a specific number.
 
+The default image is pinned to `ghcr.io/streamlinelabs/streamline:0.4.0`;
+override `tag` or `image` explicitly when testing another server release.
+
 ## Features
 
 - Kafka-compatible container for integration testing

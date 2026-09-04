@@ -28,7 +28,7 @@ import {
 const DEFAULT_IMAGE = 'ghcr.io/streamlinelabs/streamline';
 
 /** Default Docker image tag */
-const DEFAULT_TAG = 'latest';
+const DEFAULT_TAG = '0.4.0';
 
 /** Kafka protocol port */
 const KAFKA_PORT = 9092;
@@ -43,7 +43,7 @@ const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
  * Configuration options for the Streamline container.
  */
 export interface StreamlineContainerOptions {
-  /** Docker image tag to use (default: "latest") */
+  /** Docker image tag to use (default: "0.4.0") */
   tag?: string;
   /** Full Docker image name with tag (overrides tag option) */
   image?: string;

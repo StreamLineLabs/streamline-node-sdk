@@ -62,7 +62,7 @@
     "vitest": "^1.0.0"
   },
   "peerDependencies": {
-    "@streamlinelabs/sdk": ">=0.2.0"
+    "@streamlinelabs/sdk": ">=0.4.0"
   },
   "peerDependenciesMeta": {
     "@streamlinelabs/sdk": {

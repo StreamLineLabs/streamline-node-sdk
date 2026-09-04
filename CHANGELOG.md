@@ -173,6 +173,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Package identity is now scoped as `@streamlinelabs/sdk` (and
+  `@streamlinelabs/testcontainers`) so release automation cannot overwrite or
+  collide with the unrelated `streamline` package on npm. Version is now
+  `0.4.0`.
 - `NOTICE` is now published in the npm tarball (with `LICENSE`), and no longer
   claims a KafkaJS dependency — the SDK has no required runtime dependencies and
   speaks HTTP/GraphQL.

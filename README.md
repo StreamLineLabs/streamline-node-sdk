@@ -495,7 +495,7 @@ npm run lint
 - Core SDK runtime: Node.js 18 or later
 - Repository development/full validation: Node.js 22.22 or later (required by
   the security-fixed Testcontainers v12 workspace)
-- Streamline server 0.2.0 or later
+- Streamline server 0.4.0 or later, reachable over its HTTP/GraphQL API
 
 ## Configuration Reference
 
